@@ -44,16 +44,16 @@ jobs:
 
             - name: 修补 Flutter 引擎以兼容 Android 6 (API 23)
               run: |
+                  echo "=== Downloading Gradle Dependencies ==="
+                  # Run pub get first
+                  flutter pub get
+                  # Pre-download gradle dependencies so the flutter engine jar is placed in the gradle cache
+                  cd android && ./gradlew :app:dependencies || true
+                  cd ..
+
                   echo "=== Patching Flutter engine JARs for API 23 compatibility ==="
-                  FLUTTER_ROOT="${{ steps.flutter-action.outputs.FLUTTER_ROOT }}"
-                  if [ -z "$FLUTTER_ROOT" ]; then
-                    FLUTTER_ROOT="$(dirname $(dirname $(which flutter)))"
-                  fi
-                  echo "Flutter root: $FLUTTER_ROOT"
 
                   # Write the patched LocalizationPlugin.java
-                  # This adds back the API level guard for getLocales() that was removed
-                  # when Flutter raised minSdkVersion to 24
                   cat > /tmp/LocalizationPlugin.java << 'JAVAEOF'
                   package io.flutter.plugin.localization;
 
@@ -185,21 +185,15 @@ jobs:
                   }
                   JAVAEOF
 
-                  # Find all flutter.jar files in the engine cache
-                  find "$FLUTTER_ROOT/bin/cache/artifacts/engine" -name "flutter.jar" | while read JAR; do
+                  # Find all flutter embedding JARs in the Gradle cache
+                  find ~/.gradle/caches/modules-2/files-2.1/io.flutter -name "*.jar" 2>/dev/null | while read JAR; do
                     echo "Processing: $JAR"
-
-                    # Check if this JAR contains LocalizationPlugin
                     if jar tf "$JAR" | grep -q "LocalizationPlugin.class"; then
-                      echo "  Found LocalizationPlugin.class, patching..."
-
+                      echo "  Found LocalizationPlugin.class in $JAR, patching..."
                       WORKDIR=$(mktemp -d)
-
-                      # Extract the JAR
                       cd "$WORKDIR"
                       jar xf "$JAR"
 
-                      # Build classpath from the JAR itself + Android SDK
                       ANDROID_JAR="$ANDROID_HOME/platforms/android-37/android.jar"
                       if [ ! -f "$ANDROID_JAR" ]; then
                         ANDROID_JAR="$ANDROID_HOME/platforms/android-35/android.jar"
@@ -209,7 +203,6 @@ jobs:
                       fi
                       echo "  Using Android JAR: $ANDROID_JAR"
 
-                      # Compile the patched class
                       javac -cp "$JAR:$ANDROID_JAR" \
                             -source 17 -target 17 \
                             --add-exports java.base/jdk.internal.misc=ALL-UNNAMED \
@@ -228,14 +221,12 @@ jobs:
 
                       # Repackage the JAR with the patched class
                       jar cf "$JAR" -C "$WORKDIR" .
-                      echo "  Successfully patched $JAR"
-
+                      echo "  Successfully patched $JAR in Gradle cache!"
                       rm -rf "$WORKDIR"
                     else
                       echo "  No LocalizationPlugin found, skipping"
                     fi
                   done
-
                   echo "=== Flutter engine patching complete ==="
 
             - name: Apply Patch
