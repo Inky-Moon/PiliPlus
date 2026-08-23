@@ -43,9 +43,14 @@ subprojects {
             val pluginCompileSdk = pluginCompileSdkStr
                 ?.removePrefix("android-")
                 ?.toIntOrNull()
-            if (pluginCompileSdk != null && pluginCompileSdk < 34) {
-                project.logger.warn("Bumping compileSdk from $pluginCompileSdk to 34")
-                androidExtension.setCompileSdkVersion(34)
+            if (pluginCompileSdk != null && pluginCompileSdk < 36) {
+                project.logger.error(
+                    "Warning: Overriding compileSdk version in Flutter plugin: ${project.name} " +
+                            "from $pluginCompileSdk to 36 (to work around https://issuetracker.google.com/issues/199180389).\n" +
+                            "If there is not a new version of ${project.name}, consider filing an issue against ${project.name} " +
+                            "to increase their compileSdk to the latest (otherwise try updating to the latest version)."
+                )
+                androidExtension.setCompileSdkVersion(36)
             }
 
             // Force minSdkVersion to 23 for Android 6.0+ compatibility

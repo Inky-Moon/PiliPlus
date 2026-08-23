@@ -3,15 +3,23 @@ import org.jetbrains.kotlin.konan.properties.Properties
 
 plugins {
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+val agpMajorVersion = com.android.Version.ANDROID_GRADLE_PLUGIN_VERSION
+    .substringBefore('.')
+    .toInt()
+val builtInKotlinProperty = providers.gradleProperty("android.builtInKotlin").orNull
+val isBuiltInKotlinEnabled = agpMajorVersion >= 9 &&
+        (builtInKotlinProperty == null || builtInKotlinProperty.toBoolean())
+if (!isBuiltInKotlinEnabled) {
+    apply(plugin = "org.jetbrains.kotlin.android")
+}
 
 android {
     namespace = "com.example.piliplus"
-    compileSdk = 34
+    compileSdk = 37
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -23,7 +31,7 @@ android {
     defaultConfig {
         applicationId = "com.example.piliplus"
         minSdk = 23  // Hardcoded for Android 6.0+ compatibility (flutter.minSdkVersion defaults to 24 in Flutter 3.35+)
-        targetSdk = 34
+        targetSdk = 37
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
