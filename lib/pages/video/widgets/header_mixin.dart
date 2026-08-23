@@ -6,6 +6,8 @@ import 'package:PiliPlus/utils/extension/num_ext.dart';
 import 'package:PiliPlus/utils/page_utils.dart';
 import 'package:PiliPlus/utils/theme_utils.dart';
 import 'package:get/get.dart';
+import "package:file_picker/file_picker.dart";
+import "package:PiliPlus/utils/font_utils.dart";
 import 'package:material_ui/material_ui.dart';
 
 mixin HeaderMixin<T extends StatefulWidget> on State<T> {
@@ -454,8 +456,9 @@ mixin HeaderMixin<T extends StatefulWidget> on State<T> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text('弹幕字体名称 (留空为系统默认)'),
+                        const Text('自定义弹幕字体 (ttf/otf)'),
                         resetBtn(theme, '系统默认', () {
+                          DanmakuOptions.danmakuFontPath = null;
                           DanmakuOptions.danmakuFontFamily = null;
                           setState(() {});
                           setOptions();
@@ -464,19 +467,40 @@ mixin HeaderMixin<T extends StatefulWidget> on State<T> {
                     ),
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 8),
-                      child: TextField(
-                        controller: TextEditingController(
-                            text: DanmakuOptions.danmakuFontFamily ?? ''),
-                        decoration: const InputDecoration(
-                          hintText: '如: Roboto, sans-serif, 微软雅黑',
-                          isDense: true,
-                          border: OutlineInputBorder(),
-                        ),
-                        onChanged: (val) {
-                          DanmakuOptions.danmakuFontFamily =
-                              val.trim().isEmpty ? null : val.trim();
-                          setOptions();
-                        },
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              DanmakuOptions.danmakuFontPath?.split('/').last ?? '未选择 (使用系统默认)',
+                              style: TextStyle(
+                                color: DanmakuOptions.danmakuFontPath == null
+                                    ? theme.colorScheme.outline
+                                    : theme.colorScheme.onSurface,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          ElevatedButton(
+                            onPressed: () async {
+                              final result = await FilePicker.platform.pickFiles(
+                                type: FileType.custom,
+                                allowedExtensions: ['ttf', 'otf', 'ttc'],
+                              );
+                              if (result != null && result.files.single.path != null) {
+                                final path = result.files.single.path!;
+                                final success = await FontUtils.loadNewFont(path);
+                                if (success) {
+                                  DanmakuOptions.danmakuFontPath = path;
+                                  setState(() {});
+                                  setOptions();
+                                }
+                              }
+                            },
+                            child: const Text('选择文件'),
+                          ),
+                        ],
                       ),
                     ),
                   ],
