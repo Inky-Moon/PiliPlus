@@ -30,7 +30,7 @@ jobs:
               id: flutter-action
               with:
                   channel: stable
-                  flutter-version-file: pubspec.yaml
+                  flutter-version: '3.24.5'
                   cache: true
 
             - name: 安装 PowerShell
@@ -38,9 +38,11 @@ jobs:
                   sudo apt-get update
                   sudo apt-get install -y powershell
 
-            - name: Apply Patch
+            - name: Apply Patch (Skipped for older Flutter to prevent git conflicts)
               shell: pwsh
-              run: lib/scripts/patch.ps1 android
+              run: |
+                  echo "Skipping patch.ps1 to avoid conflicts with Flutter 3.24.5"
+                  # lib/scripts/patch.ps1 android
 
             - name: 生成版本信息
               shell: pwsh
