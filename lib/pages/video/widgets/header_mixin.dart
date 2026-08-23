@@ -455,7 +455,7 @@ mixin HeaderMixin<T extends StatefulWidget> on State<T> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         const Text('弹幕字体名称 (留空为系统默认)'),
-                        resetBtn(theme, null, () {
+                        resetBtn(theme, '系统默认', () {
                           DanmakuOptions.danmakuFontFamily = null;
                           setState(() {});
                           setOptions();

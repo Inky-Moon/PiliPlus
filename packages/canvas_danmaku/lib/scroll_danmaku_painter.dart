@@ -73,6 +73,7 @@ final class ScrollDanmakuPainter extends BaseDanmakuPainter {
       fontSize,
       fontWeight,
       strokeWidth,
+      fontFamily,
     );
     if (!item.suspend) {
       final startPosition = size.width;
