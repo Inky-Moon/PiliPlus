@@ -1,5 +1,15 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     package="com.example.piliplus">
+
+    <!-- Force Android 6.0+ (API 23) compatibility: override any plugins that declare minSdkVersion > 23 -->
+    <uses-sdk tools:overrideLibrary="
+        io.flutter.plugins.camera,
+        dev.jideguru.filepicker,
+        io.flutter.plugins.webviewflutter,
+        com.baseflow.permissionhandler,
+        dev.fluttercommunity.plus.battery,
+        dev.fluttercommunity.plus.deviceinfo" />
 
     <queries>
         <intent>

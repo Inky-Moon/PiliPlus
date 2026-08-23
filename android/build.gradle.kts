@@ -52,6 +52,16 @@ subprojects {
                 )
                 androidExtension.setCompileSdkVersion(36)
             }
+
+            // Force minSdkVersion to 23 for Android 6.0+ compatibility
+            val currentMinSdk = androidExtension.defaultConfig.minSdkVersion?.apiLevel
+            if (currentMinSdk != null && currentMinSdk > 23) {
+                project.logger.warn(
+                    "Overriding minSdkVersion in Flutter plugin: ${project.name} " +
+                            "from $currentMinSdk to 23 for Android 6.0 compatibility."
+                )
+                androidExtension.defaultConfig.minSdkVersion(23)
+            }
         }
 
         project.buildDir = File(rootProject.buildDir, project.name)
