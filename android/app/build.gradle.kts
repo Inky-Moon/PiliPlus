@@ -53,6 +53,13 @@ android {
             enableV1Signing = true
             enableV2Signing = true
         }
+    } ?: signingConfigs.create("fallback") {
+        storeFile = file("piliplus.jks")
+        storePassword = "123456"
+        keyAlias = "piliplus"
+        keyPassword = "123456"
+        enableV1Signing = true
+        enableV2Signing = true
     }
 
     buildFeatures {
