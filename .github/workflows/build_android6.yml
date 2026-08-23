@@ -62,24 +62,20 @@ jobs:
                   import android.content.res.Configuration;
                   import android.os.Build;
                   import android.os.LocaleList;
-                  import androidx.annotation.NonNull;
-                  import androidx.annotation.Nullable;
-                  import androidx.annotation.VisibleForTesting;
                   import io.flutter.embedding.engine.systemchannels.LocalizationChannel;
                   import java.util.ArrayList;
                   import java.util.List;
                   import java.util.Locale;
 
                   public class LocalizationPlugin {
-                    @NonNull private final LocalizationChannel localizationChannel;
-                    @NonNull private final Context context;
+                    private final LocalizationChannel localizationChannel;
+                    private final Context context;
 
                     @SuppressLint({"AppBundleLocaleChanges", "DiscouragedApi"})
-                    @VisibleForTesting
                     final LocalizationChannel.LocalizationMessageHandler localizationMessageHandler =
                         new LocalizationChannel.LocalizationMessageHandler() {
                           @Override
-                          public String getStringResource(@NonNull String key, @Nullable String localeString) {
+                          public String getStringResource(String key, String localeString) {
                             Context localContext = context;
                             if (localeString != null) {
                               Locale locale = localeFromString(localeString);
@@ -97,15 +93,14 @@ jobs:
                         };
 
                     public LocalizationPlugin(
-                        @NonNull Context context, @NonNull LocalizationChannel localizationChannel) {
+                        Context context, LocalizationChannel localizationChannel) {
                       this.context = context;
                       this.localizationChannel = localizationChannel;
                       this.localizationChannel.setLocalizationMessageHandler(localizationMessageHandler);
                     }
 
                     @SuppressWarnings("deprecation")
-                    @Nullable
-                    public Locale resolveNativeLocale(@Nullable List<Locale> supportedLocales) {
+                    public Locale resolveNativeLocale(List<Locale> supportedLocales) {
                       if (supportedLocales == null || supportedLocales.isEmpty()) {
                         return null;
                       }
@@ -163,7 +158,7 @@ jobs:
                     }
 
                     @SuppressWarnings("deprecation")
-                    public void sendLocalesToFlutter(@NonNull Configuration config) {
+                    public void sendLocalesToFlutter(Configuration config) {
                       List<Locale> locales = new ArrayList<>();
                       if (Build.VERSION.SDK_INT >= 24) {
                         LocaleList localeList = config.getLocales();
@@ -178,8 +173,7 @@ jobs:
                       localizationChannel.sendLocales(locales);
                     }
 
-                    @VisibleForTesting
-                    static Locale localeFromString(@NonNull String localeString) {
+                    static Locale localeFromString(String localeString) {
                       if (localeString.contains("-")) {
                         String[] parts = localeString.split("-", -1);
                         if (parts.length == 1) return new Locale(parts[0]);
