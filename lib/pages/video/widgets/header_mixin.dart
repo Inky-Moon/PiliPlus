@@ -450,6 +450,35 @@ mixin HeaderMixin<T extends StatefulWidget> on State<T> {
                         onChanged: updateLineHeight,
                       ),
                     ),
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('弹幕字体名称 (留空为系统默认)'),
+                        resetBtn(theme, null, () {
+                          DanmakuOptions.danmakuFontFamily = null;
+                          setState(() {});
+                          setOptions();
+                        }),
+                      ],
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: TextField(
+                        controller: TextEditingController(
+                            text: DanmakuOptions.danmakuFontFamily ?? ''),
+                        decoration: const InputDecoration(
+                          hintText: '如: Roboto, sans-serif, 微软雅黑',
+                          isDense: true,
+                          border: OutlineInputBorder(),
+                        ),
+                        onChanged: (val) {
+                          DanmakuOptions.danmakuFontFamily =
+                              val.trim().isEmpty ? null : val.trim();
+                          setOptions();
+                        },
+                      ),
+                    ),
                   ],
                 ),
               ),

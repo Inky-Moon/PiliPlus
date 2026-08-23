@@ -780,6 +780,9 @@ abstract final class Pref {
   static int get danmakuWeight =>
       _setting.get(SettingBoxKey.danmakuWeight, defaultValue: 0);
 
+  static String? get danmakuFontFamily =>
+      _setting.get(SettingBoxKey.danmakuFontFamily);
+
   static double get danmakuShowArea =>
       _setting.get(SettingBoxKey.danmakuShowArea, defaultValue: 0.5);
 

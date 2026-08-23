@@ -194,6 +194,7 @@ abstract final class SettingBoxKey {
       showVipDanmaku = 'showVipDanmaku',
       mergeDanmaku = 'mergeDanmaku',
       danmakuWeight = 'danmakuWeight',
+      danmakuFontFamily = 'danmakuFontFamily',
       danmakuBlockType = 'danmakuBlockType',
       danmakuShowArea = 'danmakuShowArea',
       danmakuOpacity = 'danmakuOpacity',
