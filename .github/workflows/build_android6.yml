@@ -45,186 +45,105 @@ jobs:
             - name: 修补 Flutter 引擎以兼容 Android 6 (API 23)
               run: |
                   echo "=== Downloading Gradle Dependencies ==="
-                  # Run pub get first
                   flutter pub get
-                  # Pre-download gradle dependencies so the flutter engine jar is placed in the gradle cache
                   cd android && ./gradlew :app:dependencies || true
                   cd ..
 
-                  echo "=== Patching Flutter engine JARs for API 23 compatibility ==="
+                  echo "=== Setting up Javassist ==="
+                  wget https://repo1.maven.org/maven2/org/javassist/javassist/3.29.2-GA/javassist-3.29.2-GA.jar -O /tmp/javassist.jar
 
-                  # Write the patched LocalizationPlugin.java
-                  cat > /tmp/LocalizationPlugin.java << 'JAVAEOF'
-                  package io.flutter.plugin.localization;
+                  echo "=== Writing Patcher.java ==="
+                  cat > /tmp/Patcher.java << 'JAVAEOF'
+                  import java.io.*;
+                  import javassist.*;
+                  import javassist.expr.*;
 
-                  import android.annotation.SuppressLint;
-                  import android.content.Context;
-                  import android.content.res.Configuration;
-                  import android.os.Build;
-                  import android.os.LocaleList;
-                  import io.flutter.embedding.engine.systemchannels.LocalizationChannel;
-                  import java.util.ArrayList;
-                  import java.util.List;
-                  import java.util.Locale;
+                  public class Patcher {
+                      public static void main(String[] args) throws Exception {
+                          String jarPath = args[0];
+                          String androidJarPath = args[1];
+                          ClassPool pool = ClassPool.getDefault();
+                          pool.insertClassPath(jarPath);
+                          pool.insertClassPath(androidJarPath);
 
-                  public class LocalizationPlugin {
-                    private final LocalizationChannel localizationChannel;
-                    private final Context context;
+                          boolean patched = false;
+                          
+                          try {
+                              CtClass cc = pool.get("io.flutter.plugin.localization.LocalizationPlugin");
+                              cc.getDeclaredMethod("resolveNativeLocale").setBody("{ if ($1 == null || $1.isEmpty()) return null; return (java.util.Locale)$1.get(0); }");
+                              cc.getDeclaredMethod("sendLocalesToFlutter").setBody("{ java.util.List locales = new java.util.ArrayList(); locales.add($1.locale); this.localizationChannel.sendLocales(locales); }");
+                              cc.writeFile("/tmp/patched_classes");
+                              System.out.println("Patched LocalizationPlugin");
+                              patched = true;
+                          } catch (Exception e) { e.printStackTrace(); }
 
-                    @SuppressLint({"AppBundleLocaleChanges", "DiscouragedApi"})
-                    final LocalizationChannel.LocalizationMessageHandler localizationMessageHandler =
-                        new LocalizationChannel.LocalizationMessageHandler() {
-                          @Override
-                          public String getStringResource(String key, String localeString) {
-                            Context localContext = context;
-                            if (localeString != null) {
-                              Locale locale = localeFromString(localeString);
-                              Configuration config = new Configuration(context.getResources().getConfiguration());
-                              config.setLocale(locale);
-                              localContext = context.createConfigurationContext(config);
-                            }
-                            String packageName = context.getPackageName();
-                            int resId = localContext.getResources().getIdentifier(key, "string", packageName);
-                            if (resId != 0) {
-                              return localContext.getResources().getString(resId);
-                            }
-                            return null;
+                          try {
+                              CtClass cc = pool.get("io.flutter.view.AccessibilityBridge");
+                              cc.instrument(new ExprEditor() {
+                                  public void edit(MethodCall m) throws CannotCompileException {
+                                      if (m.getMethodName().equals("setImportantForAccessibility")) {
+                                          m.replace("{ }");
+                                      }
+                                  }
+                              });
+                              cc.writeFile("/tmp/patched_classes");
+                              System.out.println("Patched AccessibilityBridge");
+                              patched = true;
+                          } catch (Exception e) { e.printStackTrace(); }
+                          
+                          try {
+                              CtClass cc = pool.get("io.flutter.view.AccessibilityViewEmbedder");
+                              cc.instrument(new ExprEditor() {
+                                  public void edit(MethodCall m) throws CannotCompileException {
+                                      if (m.getMethodName().equals("setImportantForAccessibility")) {
+                                          m.replace("{ }");
+                                      }
+                                  }
+                              });
+                              cc.writeFile("/tmp/patched_classes");
+                              System.out.println("Patched AccessibilityViewEmbedder");
+                              patched = true;
+                          } catch (Exception e) { e.printStackTrace(); }
+
+                          try {
+                              CtClass cc = pool.get("io.flutter.util.PathUtils");
+                              cc.getDeclaredMethod("getDataDirectory").setBody("{ return $1.getApplicationInfo().dataDir; }");
+                              cc.writeFile("/tmp/patched_classes");
+                              System.out.println("Patched PathUtils");
+                              patched = true;
+                          } catch (Exception e) { e.printStackTrace(); }
+                          
+                          if (!patched) {
+                              System.out.println("No classes patched!");
                           }
-                        };
-
-                    public LocalizationPlugin(
-                        Context context, LocalizationChannel localizationChannel) {
-                      this.context = context;
-                      this.localizationChannel = localizationChannel;
-                      this.localizationChannel.setLocalizationMessageHandler(localizationMessageHandler);
-                    }
-
-                    @SuppressWarnings("deprecation")
-                    public Locale resolveNativeLocale(List<Locale> supportedLocales) {
-                      if (supportedLocales == null || supportedLocales.isEmpty()) {
-                        return null;
                       }
-                      // API 26+: use LanguageRange
-                      if (Build.VERSION.SDK_INT >= 26) {
-                        List<Locale.LanguageRange> languageRanges = new ArrayList<>();
-                        LocaleList localeList = context.getResources().getConfiguration().getLocales();
-                        int localeCount = localeList.size();
-                        for (int index = 0; index < localeCount; ++index) {
-                          Locale locale = localeList.get(index);
-                          String fullRange = locale.getLanguage();
-                          if (!locale.getScript().isEmpty()) {
-                            fullRange += "-" + locale.getScript();
-                          }
-                          if (!locale.getCountry().isEmpty()) {
-                            fullRange += "-" + locale.getCountry();
-                          }
-                          languageRanges.add(new Locale.LanguageRange(fullRange));
-                          languageRanges.add(new Locale.LanguageRange(locale.getLanguage()));
-                          languageRanges.add(new Locale.LanguageRange(locale.getLanguage() + "-*"));
-                        }
-                        Locale platformResolvedLocale = Locale.lookup(languageRanges, supportedLocales);
-                        if (platformResolvedLocale != null) {
-                          return platformResolvedLocale;
-                        }
-                        return supportedLocales.get(0);
-                      } else if (Build.VERSION.SDK_INT >= 24) {
-                        // API 24-25: use getLocales() without LanguageRange
-                        LocaleList localeList = context.getResources().getConfiguration().getLocales();
-                        for (int index = 0; index < localeList.size(); ++index) {
-                          Locale preferredLocale = localeList.get(index);
-                          for (Locale locale : supportedLocales) {
-                            if (preferredLocale.equals(locale)) return locale;
-                          }
-                          for (Locale locale : supportedLocales) {
-                            if (preferredLocale.getLanguage().equals(locale.toLanguageTag())) return locale;
-                          }
-                          for (Locale locale : supportedLocales) {
-                            if (preferredLocale.getLanguage().equals(locale.getLanguage())) return locale;
-                          }
-                        }
-                        return supportedLocales.get(0);
-                      }
-                      // API 23 and below: use deprecated config.locale
-                      Locale preferredLocale = context.getResources().getConfiguration().locale;
-                      if (preferredLocale != null) {
-                        for (Locale locale : supportedLocales) {
-                          if (preferredLocale.equals(locale)) return locale;
-                        }
-                        for (Locale locale : supportedLocales) {
-                          if (preferredLocale.getLanguage().equals(locale.toString())) return locale;
-                        }
-                      }
-                      return supportedLocales.get(0);
-                    }
-
-                    @SuppressWarnings("deprecation")
-                    public void sendLocalesToFlutter(Configuration config) {
-                      List<Locale> locales = new ArrayList<>();
-                      if (Build.VERSION.SDK_INT >= 24) {
-                        LocaleList localeList = config.getLocales();
-                        int localeCount = localeList.size();
-                        for (int index = 0; index < localeCount; ++index) {
-                          locales.add(localeList.get(index));
-                        }
-                      } else {
-                        // Fallback for API 23: use deprecated single locale
-                        locales.add(config.locale);
-                      }
-                      localizationChannel.sendLocales(locales);
-                    }
-
-                    static Locale localeFromString(String localeString) {
-                      if (localeString.contains("-")) {
-                        String[] parts = localeString.split("-", -1);
-                        if (parts.length == 1) return new Locale(parts[0]);
-                        else if (parts.length == 2) return new Locale(parts[0], parts[1]);
-                        else return new Locale(parts[0], parts[2], parts[1]);
-                      }
-                      return new Locale(localeString);
-                    }
                   }
                   JAVAEOF
 
-                  # Find all flutter embedding JARs in the Gradle cache
+                  javac -cp /tmp/javassist.jar /tmp/Patcher.java
+
+                  echo "=== Patching Flutter engine JARs for API 23 compatibility ==="
+                  ANDROID_JAR="$ANDROID_HOME/platforms/android-34/android.jar"
+                  if [ ! -f "$ANDROID_JAR" ]; then
+                    ANDROID_JAR="$ANDROID_HOME/platforms/android-35/android.jar"
+                  fi
+                  if [ ! -f "$ANDROID_JAR" ]; then
+                    ANDROID_JAR="$ANDROID_HOME/platforms/android-37/android.jar"
+                  fi
+                  echo "Using Android JAR: $ANDROID_JAR"
+                  
                   find ~/.gradle/caches/modules-2/files-2.1/io.flutter -name "*.jar" 2>/dev/null | while read JAR; do
-                    echo "Processing: $JAR"
                     if jar tf "$JAR" | grep -q "LocalizationPlugin.class"; then
-                      echo "  Found LocalizationPlugin.class in $JAR, patching..."
-                      WORKDIR=$(mktemp -d)
-                      cd "$WORKDIR"
-                      jar xf "$JAR"
-
-                      ANDROID_JAR="$ANDROID_HOME/platforms/android-37/android.jar"
-                      if [ ! -f "$ANDROID_JAR" ]; then
-                        ANDROID_JAR="$ANDROID_HOME/platforms/android-35/android.jar"
+                      echo "Processing: $JAR"
+                      mkdir -p /tmp/patched_classes
+                      rm -rf /tmp/patched_classes/*
+                      
+                      java -cp /tmp/javassist.jar:/tmp Patcher "$JAR" "$ANDROID_JAR"
+                      
+                      if [ "$(ls -A /tmp/patched_classes)" ]; then
+                         jar uf "$JAR" -C /tmp/patched_classes .
+                         echo "Successfully updated $JAR"
                       fi
-                      if [ ! -f "$ANDROID_JAR" ]; then
-                        ANDROID_JAR="$ANDROID_HOME/platforms/android-34/android.jar"
-                      fi
-                      echo "  Using Android JAR: $ANDROID_JAR"
-
-                      javac -cp "$JAR:$ANDROID_JAR" \
-                            -source 17 -target 17 \
-                            --add-exports java.base/jdk.internal.misc=ALL-UNNAMED \
-                            -d "$WORKDIR" \
-                            /tmp/LocalizationPlugin.java 2>&1 || {
-                        echo "  WARNING: Compilation failed, trying with relaxed options..."
-                        javac -cp "$JAR:$ANDROID_JAR" \
-                              -source 11 -target 11 \
-                              -d "$WORKDIR" \
-                              /tmp/LocalizationPlugin.java 2>&1 || {
-                          echo "  ERROR: Could not compile patched LocalizationPlugin"
-                          rm -rf "$WORKDIR"
-                          continue
-                        }
-                      }
-
-                      # Repackage the JAR with the patched class
-                      jar cf "$JAR" -C "$WORKDIR" .
-                      echo "  Successfully patched $JAR in Gradle cache!"
-                      rm -rf "$WORKDIR"
-                    else
-                      echo "  No LocalizationPlugin found, skipping"
                     fi
                   done
                   echo "=== Flutter engine patching complete ==="
