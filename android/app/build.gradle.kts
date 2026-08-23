@@ -11,7 +11,7 @@ plugins {
 
 android {
     namespace = "com.example.piliplus"
-    compileSdk = 37
+    compileSdk = 34
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -23,7 +23,7 @@ android {
     defaultConfig {
         applicationId = "com.example.piliplus"
         minSdk = 23  // Hardcoded for Android 6.0+ compatibility (flutter.minSdkVersion defaults to 24 in Flutter 3.35+)
-        targetSdk = 37
+        targetSdk = 34
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
