@@ -50,7 +50,7 @@ jobs:
 
             - name: Flutter Build APK (Android 6 Compatible)
               run: |
-                  flutter build apk --release --split-per-abi --dart-define-from-file=pili_release.json --no-pub
+                  flutter build apk --release --split-per-abi --dart-define-from-file=pili_release.json
 
             - name: 重命名 APK
               run: |
