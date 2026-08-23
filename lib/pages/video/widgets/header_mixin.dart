@@ -484,12 +484,12 @@ mixin HeaderMixin<T extends StatefulWidget> on State<T> {
                           const SizedBox(width: 8),
                           ElevatedButton(
                             onPressed: () async {
-                              final result = await FilePicker.platform.pickFiles(
+                              final result = await FilePicker.pickFile(
                                 type: FileType.custom,
-                                allowedExtensions: ['ttf', 'otf', 'ttc'],
+                                allowedExtensions: const ['ttf', 'otf', 'ttc'],
                               );
-                              if (result != null && result.files.single.path != null) {
-                                final path = result.files.single.path!;
+                              if (result != null) {
+                                final path = result.xFile.path;
                                 final success = await FontUtils.loadNewFont(path);
                                 if (success) {
                                   DanmakuOptions.danmakuFontPath = path;
