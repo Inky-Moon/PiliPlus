@@ -1,6 +1,9 @@
 name: Build Android 6 Compatible APK
 
 on:
+    push:
+        branches:
+            - main
     workflow_dispatch:
 
 jobs:
@@ -168,20 +171,18 @@ jobs:
                   done
               shell: bash
 
-            - name: 上传 arm64-v8a
-              uses: actions/upload-artifact@v4
-              with:
-                  name: Android6_arm64-v8a
-                  path: PiliPlus_android6_*_arm64-v8a.apk
 
-            - name: 上传 armeabi-v7a
-              uses: actions/upload-artifact@v4
+            - name: 发布到 Releases
+              uses: softprops/action-gh-release@v2
               with:
-                  name: Android6_armeabi-v7a
-                  path: PiliPlus_android6_*_armeabi-v7a.apk
-
-            - name: 上传 x86_64
-              uses: actions/upload-artifact@v4
-              with:
-                  name: Android6_x86_64
-                  path: PiliPlus_android6_*_x86_64.apk
+                  tag_name: custom-build-${{ github.run_number }}
+                  name: "定制版构建 #${{ github.run_number }}"
+                  body: |
+                    🚀 **全自动构建结果**
+                    
+                    ✅ 包含 Android 6 (API 23) 闪退修复
+                    ✅ 包含自定义弹幕字体 (TTF/OTF) 支持
+                    ✅ 包含无损覆盖更新的固定签名
+                    
+                    下载下方的 `.apk` 即可直接安装！
+                  files: PiliPlus_android6_*.apk
