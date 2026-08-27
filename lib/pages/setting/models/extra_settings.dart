@@ -1,3 +1,4 @@
+import 'package:PiliPlus/common/widgets/dialog/export_import.dart';
 import 'dart:io' show Platform;
 import 'dart:math' show max;
 
@@ -633,6 +634,24 @@ List<SettingsModel> get extraSettings => [
       if (val) {
         Update.checkUpdate(false);
       }
+    },
+  ),
+
+  NormalModel(
+    title: '本地设置备份',
+    subtitle: '导入/导出所有应用设置',
+    leading: const Icon(Icons.settings_backup_restore),
+    onTap: (context) {
+      showImportExportDialog<Map<String, dynamic>>(
+        context,
+        title: '应用设置',
+        onExport: GStorage.exportAllSettings,
+        onImport: (json) async {
+          await GStorage.importAllJsonSettings(json);
+          SmartDialog.showToast('导入成功，重启应用生效');
+        },
+        localFileName: () => 'settings',
+      );
     },
   ),
 ];
