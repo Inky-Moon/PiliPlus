@@ -12,6 +12,8 @@
         dev.fluttercommunity.plus.deviceinfo" />
 
     <queries>
+        <!-- For BiliSendCommAntifraud (Android 11+ Package Visibility) -->
+        <package android:name="icu.freedomIntrovert.biliSendCommAntifraud" />
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <category android:name="android.intent.category.BROWSABLE" />
