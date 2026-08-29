@@ -127,33 +127,63 @@ jobs:
                   javac -cp /tmp/javassist.jar /tmp/Patcher.java
 
                   echo "=== Patching Flutter engine JARs for API 23 compatibility ==="
-                  # Dynamically find the highest android.jar available on the runner
                   ANDROID_JAR=$(ls -1 $ANDROID_HOME/platforms/android-*/android.jar 2>/dev/null | sort -V | tail -n 1)
                   echo "Using Android JAR: $ANDROID_JAR"
                   
-                  # Use javassist to globally intercept all calls to Configuration.getLocales() 
-                  # and manually patch known LocalizationPlugin methods, across all engine jars.
-                  find ~ -name "*flutter_embedding*.jar" 2>/dev/null
-                  find ~/.gradle -name "*.jar" 2>/dev/null | grep -E "flutter_embedding|io.flutter" | while read JAR; do
-                    if jar tf "$JAR" | grep -q "LocalizationPlugin.class"; then
-                      echo "Processing: $JAR"
-                      mkdir -p /tmp/patched_classes
-                      rm -rf /tmp/patched_classes/*
-                      
-                      java -cp /tmp/javassist.jar:/tmp Patcher "$JAR" "$ANDROID_JAR"
-                      
-                      if [ "$(ls -A /tmp/patched_classes)" ]; then
-                         jar uf "$JAR" -C /tmp/patched_classes .
-                         echo "Successfully updated $JAR"
-                      fi
-                    fi
-                  done
-                  echo "=== Flutter engine patching complete ==="
-
-                  echo "=== Clearing Gradle transforms cache to force re-transform ==="
-                  rm -rf ~/.gradle/caches/*/transforms/ 2>/dev/null || true
-                  cd android && ./gradlew --stop || true
-                  cd ..
+                  # Find the raw flutter embedding jar
+                  RAW_JAR=$(find ~/.gradle/caches/modules-2 -name "*flutter_embedding_release*.jar" | head -n 1)
+                  if [ -z "$RAW_JAR" ]; then
+                    echo "Could not find raw flutter embedding jar!"
+                    exit 1
+                  fi
+                  
+                  echo "Found raw JAR: $RAW_JAR"
+                  
+                  # Create a local maven repo structure
+                  # The path is something like: io/flutter/flutter_embedding_release/1.0.0-5d531788691ec3404cac0cee66ead4007b177363
+                  VERSION=$(basename $(dirname $(dirname $RAW_JAR)))
+                  LOCAL_REPO="$GITHUB_WORKSPACE/android/local_repo/io/flutter/flutter_embedding_release/$VERSION"
+                  mkdir -p "$LOCAL_REPO"
+                  
+                  # Copy jar and pom
+                  POM_FILE=$(find ~/.gradle/caches/modules-2 -name "*flutter_embedding_release*.pom" | grep $VERSION | head -n 1)
+                  cp "$RAW_JAR" "$LOCAL_REPO/flutter_embedding_release-$VERSION.jar"
+                  if [ -n "$POM_FILE" ]; then
+                    cp "$POM_FILE" "$LOCAL_REPO/flutter_embedding_release-$VERSION.pom"
+                  fi
+                  
+                  # Patch the jar in the local maven repo
+                  LOCAL_JAR="$LOCAL_REPO/flutter_embedding_release-$VERSION.jar"
+                  mkdir -p /tmp/patched_classes
+                  rm -rf /tmp/patched_classes/*
+                  java -cp /tmp/javassist.jar:/tmp Patcher "$LOCAL_JAR" "$ANDROID_JAR"
+                  if [ "$(ls -A /tmp/patched_classes)" ]; then
+                     jar uf "$LOCAL_JAR" -C /tmp/patched_classes .
+                     echo "Successfully updated local repo JAR"
+                  fi
+                  
+                  # Create an init.gradle script to inject this local repo with highest priority
+                  mkdir -p ~/.gradle/init.d
+                  cat << 'GRADLE_INIT' > ~/.gradle/init.d/patch_flutter.gradle
+                  allprojects {
+                      buildscript {
+                          repositories {
+                              maven {
+                                  url "file://${System.getenv('GITHUB_WORKSPACE')}/android/local_repo"
+                                  name "LocalPatchedFlutter"
+                              }
+                          }
+                      }
+                      repositories {
+                          maven {
+                              url "file://${System.getenv('GITHUB_WORKSPACE')}/android/local_repo"
+                              name "LocalPatchedFlutter"
+                          }
+                      }
+                  }
+                  GRADLE_INIT
+                  
+                  echo "=== Flutter engine patching complete ===
 
             - name: Apply Patch
               shell: pwsh
