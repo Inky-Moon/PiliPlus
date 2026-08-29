@@ -163,6 +163,17 @@ jobs:
                      echo "Successfully updated local repo JAR"
                   fi
                   
+                  # Rename the version to guarantee a cache miss in Gradle/R8!
+                  NEW_VERSION="${VERSION}-patched"
+                  NEW_REPO="$GITHUB_WORKSPACE/android/local_repo/io/flutter/flutter_embedding_release/$NEW_VERSION"
+                  mv "$LOCAL_REPO" "$NEW_REPO"
+                  mv "$NEW_REPO/flutter_embedding_release-$VERSION.jar" "$NEW_REPO/flutter_embedding_release-$NEW_VERSION.jar"
+                  mv "$NEW_REPO/flutter_embedding_release-$VERSION.pom" "$NEW_REPO/flutter_embedding_release-$NEW_VERSION.pom"
+                  
+                  # Update the POM file version
+                  sed -i "s|<version>$VERSION</version>|<version>$NEW_VERSION</version>|g" "$NEW_REPO/flutter_embedding_release-$NEW_VERSION.pom"
+
+                  
                   # Inject the local Maven repository directly into settings.gradle.kts
                   cat << 'SETTINGS_PATCH' >> android/settings.gradle.kts
                   
@@ -178,6 +189,19 @@ jobs:
                           }
                       }
                   }
+                  
+                  # Force Gradle to use our new -patched version across all configurations
+                  gradle.projectsLoaded {
+                      rootProject.allprojects {
+                          configurations.all {
+                              resolutionStrategy.eachDependency { DependencyResolveDetails details ->
+                                  if (details.requested.group == 'io.flutter' && details.requested.name == 'flutter_embedding_release') {
+                                      details.useVersion(details.requested.version + "-patched")
+                                  }
+                              }
+                          }
+                      }
+                  }
                   SETTINGS_PATCH
                   
                   echo "=== Flutter engine patching complete ==="
@@ -189,6 +213,14 @@ jobs:
             - name: 生成版本信息
               shell: pwsh
               run: lib/scripts/build.ps1 android
+
+            - name: Disable Gradle Build Cache Completely
+              run: |
+                  mkdir -p ~/.gradle
+                  echo "org.gradle.caching=false" >> ~/.gradle/gradle.properties
+                  echo "org.gradle.configuration-cache=false" >> ~/.gradle/gradle.properties
+                  # Also kill any running daemons again just in case
+                  cd android && ./gradlew --stop || true
 
             - name: Flutter Build APK (Android 6 Compatible)
               run: |
