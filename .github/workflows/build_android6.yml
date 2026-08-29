@@ -126,15 +126,12 @@ jobs:
                   javac -cp /tmp/javassist.jar /tmp/Patcher.java
 
                   echo "=== Patching Flutter engine JARs for API 23 compatibility ==="
-                  ANDROID_JAR="$ANDROID_HOME/platforms/android-34/android.jar"
-                  if [ ! -f "$ANDROID_JAR" ]; then
-                    ANDROID_JAR="$ANDROID_HOME/platforms/android-35/android.jar"
-                  fi
-                  if [ ! -f "$ANDROID_JAR" ]; then
-                    ANDROID_JAR="$ANDROID_HOME/platforms/android-37/android.jar"
-                  fi
+                  # Dynamically find the highest android.jar available on the runner
+                  ANDROID_JAR=$(ls -1 $ANDROID_HOME/platforms/android-*/android.jar 2>/dev/null | sort -V | tail -n 1)
                   echo "Using Android JAR: $ANDROID_JAR"
                   
+                  # Use javassist to globally intercept all calls to Configuration.getLocales() 
+                  # and manually patch known LocalizationPlugin methods, across all engine jars.
                   find ~/.gradle/caches/modules-2/files-2.1/io.flutter -name "*.jar" 2>/dev/null | while read JAR; do
                     if jar tf "$JAR" | grep -q "LocalizationPlugin.class"; then
                       echo "Processing: $JAR"
