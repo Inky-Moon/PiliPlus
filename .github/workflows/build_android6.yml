@@ -130,27 +130,28 @@ jobs:
                   ANDROID_JAR=$(ls -1 $ANDROID_HOME/platforms/android-*/android.jar 2>/dev/null | sort -V | tail -n 1)
                   echo "Using Android JAR: $ANDROID_JAR"
                   
-                  # Find the raw flutter embedding jar
-                  RAW_JAR=$(find ~/.gradle/caches/modules-2 -name "*flutter_embedding_release*.jar" | head -n 1)
-                  if [ -z "$RAW_JAR" ]; then
-                    echo "Could not find raw flutter embedding jar!"
-                    exit 1
-                  fi
+                  # Directly download the Flutter engine JAR from Google Maven to avoid Gradle cache reliance
+                  ENGINE_VERSION=$(cat $FLUTTER_ROOT/bin/internal/engine.version)
+                  VERSION="1.0.0-$ENGINE_VERSION"
+                  echo "Detected Flutter engine version: $VERSION"
                   
-                  echo "Found raw JAR: $RAW_JAR"
-                  
-                  # Create a local maven repo structure
-                  # The path is something like: io/flutter/flutter_embedding_release/1.0.0-5d531788691ec3404cac0cee66ead4007b177363
-                  VERSION=$(basename $(dirname $(dirname $RAW_JAR)))
                   LOCAL_REPO="$GITHUB_WORKSPACE/android/local_repo/io/flutter/flutter_embedding_release/$VERSION"
                   mkdir -p "$LOCAL_REPO"
                   
-                  # Copy jar and pom
-                  POM_FILE=$(find ~/.gradle/caches/modules-2 -name "*flutter_embedding_release*.pom" | grep $VERSION | head -n 1)
-                  cp "$RAW_JAR" "$LOCAL_REPO/flutter_embedding_release-$VERSION.jar"
-                  if [ -n "$POM_FILE" ]; then
-                    cp "$POM_FILE" "$LOCAL_REPO/flutter_embedding_release-$VERSION.pom"
+                  URL_BASE="https://storage.googleapis.com/download.flutter.io/io/flutter/flutter_embedding_release/$VERSION"
+                  curl -sL "$URL_BASE/flutter_embedding_release-$VERSION.jar" -o "$LOCAL_REPO/flutter_embedding_release-$VERSION.jar"
+                  curl -sL "$URL_BASE/flutter_embedding_release-$VERSION.pom" -o "$LOCAL_REPO/flutter_embedding_release-$VERSION.pom"
+                  
+                  if [ ! -s "$LOCAL_REPO/flutter_embedding_release-$VERSION.jar" ]; then
+                    echo "Failed to download flutter_embedding_release JAR!"
+                    exit 1
                   fi
+                  
+                  RAW_JAR="$LOCAL_REPO/flutter_embedding_release-$VERSION.jar"
+                  echo "Successfully downloaded JAR to $RAW_JAR"
+                  
+                  echo "Found raw JAR: $RAW_JAR"
+                  
                   
                   # Patch the jar in the local maven repo
                   LOCAL_JAR="$LOCAL_REPO/flutter_embedding_release-$VERSION.jar"
