@@ -148,6 +148,9 @@ jobs:
                   done
                   echo "=== Flutter engine patching complete ==="
 
+                  echo "=== Clearing Gradle transforms cache to force re-transform ==="
+                  rm -rf ~/.gradle/caches/transforms-3 2>/dev/null || true
+
             - name: Apply Patch
               shell: pwsh
               run: lib/scripts/patch.ps1 android
