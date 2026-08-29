@@ -165,19 +165,19 @@ jobs:
                   # Inject the local Maven repository directly into settings.gradle.kts
                   cat << 'SETTINGS_PATCH' >> android/settings.gradle.kts
                   
-dependencyResolutionManagement {
-    repositories {
-        exclusiveContent {
-            forRepository {
-                maven { url = uri("file://${System.getenv("GITHUB_WORKSPACE")}/android/local_repo") }
-            }
-            filter {
-                includeModule("io.flutter", "flutter_embedding_release")
-            }
-        }
-    }
-}
-SETTINGS_PATCH
+                  dependencyResolutionManagement {
+                      repositories {
+                          exclusiveContent {
+                              forRepository {
+                                  maven { url = uri("file://${System.getenv("GITHUB_WORKSPACE")}/android/local_repo") }
+                              }
+                              filter {
+                                  includeModule("io.flutter", "flutter_embedding_release")
+                              }
+                          }
+                      }
+                  }
+                  SETTINGS_PATCH
                   
                   echo "=== Flutter engine patching complete ==="
 
