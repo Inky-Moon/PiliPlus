@@ -192,6 +192,10 @@ jobs:
 
             - name: Flutter Build APK (Android 6 Compatible)
               run: |
+                  echo "=== Wiping Gradle build cache to force R8 recompilation ==="
+                  rm -rf ~/.gradle/caches/build-cache-* 2>/dev/null || true
+                  rm -rf ~/.gradle/caches/transforms-* 2>/dev/null || true
+                  rm -rf ~/.gradle/caches/*/transforms/ 2>/dev/null || true
                   flutter build apk --release --split-per-abi --dart-define-from-file=pili_release.json --no-pub
 
             - name: 重命名 APK
