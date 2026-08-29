@@ -641,7 +641,7 @@ List<SettingsModel> get extraSettings => [
     title: '本地设置备份',
     subtitle: '导入/导出所有应用设置',
     leading: const Icon(Icons.settings_backup_restore),
-    onTap: (context) {
+    onTap: (context, setState) {
       showImportExportDialog<Map<String, dynamic>>(
         context,
         title: '应用设置',
