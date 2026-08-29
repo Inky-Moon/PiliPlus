@@ -190,19 +190,14 @@ jobs:
                       }
                   }
                   
-                  # Force Gradle to use our new -patched version across all configurations
-                  gradle.projectsLoaded {
-                      rootProject.allprojects {
-                          configurations.all {
-                              resolutionStrategy.eachDependency { DependencyResolveDetails details ->
-                                  if (details.requested.group == 'io.flutter' && details.requested.name == 'flutter_embedding_release') {
-                                      details.useVersion(details.requested.version + "-patched")
-                                  }
-                              }
-                          }
-                      }
-                  }
                   SETTINGS_PATCH
+                  
+                  echo "=== Hacking Flutter SDK Gradle scripts to use -patched version ==="
+                  find $FLUTTER_ROOT/packages/flutter_tools/gradle -type f \( -name "*.groovy" -o -name "*.gradle" -o -name "*.kts" \) -exec sed -i 's/1.0.0-${flutterEngineHash}/1.0.0-${flutterEngineHash}-patched/g' {} +
+                  find $FLUTTER_ROOT/packages/flutter_tools/gradle -type f \( -name "*.groovy" -o -name "*.gradle" -o -name "*.kts" \) -exec sed -i 's/1.0.0-\$flutterEngineHash/1.0.0-\$flutterEngineHash-patched/g' {} +
+                  
+                  echo "=== Purging Gradle Modules Cache for flutter_embedding_release ==="
+                  rm -rf ~/.gradle/caches/modules-2/files-2.1/io.flutter/flutter_embedding_release 2>/dev/null || true
                   
                   echo "=== Flutter engine patching complete ==="
 
