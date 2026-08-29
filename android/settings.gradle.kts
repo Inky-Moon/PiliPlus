@@ -14,6 +14,7 @@ pluginManagement {
         google()
         mavenCentral()
         gradlePluginPortal()
+        maven { url = uri("file:///data/data/com.termux/files/home/distill/piliplus/local_repo") }
     }
 }
 

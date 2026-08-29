@@ -162,26 +162,22 @@ jobs:
                      echo "Successfully updated local repo JAR"
                   fi
                   
-                  # Create an init.gradle script to inject this local repo with highest priority
-                  mkdir -p ~/.gradle/init.d
-                  cat << 'GRADLE_INIT' > ~/.gradle/init.d/patch_flutter.gradle
-                  allprojects {
-                      buildscript {
-                          repositories {
-                              maven {
-                                  url "file://${System.getenv('GITHUB_WORKSPACE')}/android/local_repo"
-                                  name "LocalPatchedFlutter"
-                              }
-                          }
-                      }
-                      repositories {
-                          maven {
-                              url "file://${System.getenv('GITHUB_WORKSPACE')}/android/local_repo"
-                              name "LocalPatchedFlutter"
-                          }
-                      }
-                  }
-                  GRADLE_INIT
+                  # Inject the local Maven repository directly into settings.gradle.kts
+                  cat << 'SETTINGS_PATCH' >> android/settings.gradle.kts
+                  
+dependencyResolutionManagement {
+    repositories {
+        exclusiveContent {
+            forRepository {
+                maven { url = uri("file://${System.getenv("GITHUB_WORKSPACE")}/android/local_repo") }
+            }
+            filter {
+                includeModule("io.flutter", "flutter_embedding_release")
+            }
+        }
+    }
+}
+SETTINGS_PATCH
                   
                   echo "=== Flutter engine patching complete ==="
 
