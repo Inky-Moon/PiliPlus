@@ -183,7 +183,7 @@ jobs:
                   }
                   GRADLE_INIT
                   
-                  echo "=== Flutter engine patching complete ===
+                  echo "=== Flutter engine patching complete ==="
 
             - name: Apply Patch
               shell: pwsh
