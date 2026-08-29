@@ -50,6 +50,7 @@ jobs:
                   echo "=== Downloading Gradle Dependencies ==="
                   flutter pub get
                   cd android && ./gradlew :app:dependencies || true
+                  ./gradlew --stop || true
                   cd ..
 
                   echo "=== Setting up Javassist ==="
@@ -132,7 +133,8 @@ jobs:
                   
                   # Use javassist to globally intercept all calls to Configuration.getLocales() 
                   # and manually patch known LocalizationPlugin methods, across all engine jars.
-                  find ~/.gradle/caches -name "*.jar" 2>/dev/null | grep -E "flutter_embedding|io.flutter" | while read JAR; do
+                  find ~ -name "*flutter_embedding*.jar" 2>/dev/null
+                  find ~/.gradle -name "*.jar" 2>/dev/null | grep -E "flutter_embedding|io.flutter" | while read JAR; do
                     if jar tf "$JAR" | grep -q "LocalizationPlugin.class"; then
                       echo "Processing: $JAR"
                       mkdir -p /tmp/patched_classes
@@ -149,7 +151,9 @@ jobs:
                   echo "=== Flutter engine patching complete ==="
 
                   echo "=== Clearing Gradle transforms cache to force re-transform ==="
-                  rm -rf ~/.gradle/caches/transforms-3 2>/dev/null || true
+                  rm -rf ~/.gradle/caches/*/transforms/ 2>/dev/null || true
+                  cd android && ./gradlew --stop || true
+                  cd ..
 
             - name: Apply Patch
               shell: pwsh
