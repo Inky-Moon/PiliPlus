@@ -132,7 +132,7 @@ jobs:
                   
                   # Use javassist to globally intercept all calls to Configuration.getLocales() 
                   # and manually patch known LocalizationPlugin methods, across all engine jars.
-                  find ~/.gradle/caches/modules-2/files-2.1/io.flutter -name "*.jar" 2>/dev/null | while read JAR; do
+                  find ~/.gradle/caches -name "*.jar" 2>/dev/null | grep -E "flutter_embedding|io.flutter" | while read JAR; do
                     if jar tf "$JAR" | grep -q "LocalizationPlugin.class"; then
                       echo "Processing: $JAR"
                       mkdir -p /tmp/patched_classes
