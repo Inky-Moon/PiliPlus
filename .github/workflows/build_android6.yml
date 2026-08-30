@@ -43,7 +43,12 @@ jobs:
 
             - name: 安装 Android SDK 37
               run: |
-                  echo "y" | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-37"
+                  platform_jar="$ANDROID_HOME/platforms/android-37/android.jar"
+                  if [[ ! -f "$platform_jar" ]]; then
+                    echo "y" | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+                      "platforms;android-37"
+                  fi
+                  test -f "$platform_jar"
 
             - name: 应用项目补丁
               shell: pwsh
