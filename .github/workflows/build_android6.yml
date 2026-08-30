@@ -61,12 +61,6 @@ jobs:
             - name: 准备 Android 6 Flutter Engine
               run: bash tool/android6/prepare_engine.sh
 
-            - name: 验证 Flutter Engine 依赖
-              working-directory: android
-              run: >-
-                  ./gradlew --refresh-dependencies -Pandroid6Compatibility=1
-                  :app:verifyAndroid6FlutterEmbedding --no-daemon
-
             - name: 生成版本信息
               shell: pwsh
               run: lib/scripts/build.ps1 android
@@ -79,6 +73,12 @@ jobs:
                     --dart-define-from-file=pili_release.json \
                     --android-project-arg android6Compatibility=1 \
                     --no-pub
+
+            - name: 验证 Flutter Engine 依赖
+              working-directory: android
+              run: >-
+                  ./gradlew --refresh-dependencies -Pandroid6Compatibility=1
+                  :app:verifyAndroid6FlutterEmbedding --no-daemon
 
             - name: 验证最终 APK 字节码
               run: bash tool/android6/verify_apk.sh build/app/outputs/flutter-apk/app-*-release.apk
