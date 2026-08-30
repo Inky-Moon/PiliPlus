@@ -178,13 +178,6 @@ jobs:
                   cp /tmp/flutter_embedding_release.jar android/app/libs/flutter_embedding_release_patched.jar
                   echo "=== Copied patched JAR to android/app/libs/ ==="
 
-                  # Inject exclude + local JAR into build.gradle.kts
-                  # This is the ONLY reliable method: tell Gradle to completely
-                  # ignore the official flutter_embedding_release from Maven,
-                  # and use our patched local file instead.
-                  echo "=== Injecting dependency override into build.gradle.kts ==="
-                  printf '\n// Android 6 Compatibility Patch\nconfigurations.all {\n    exclude(group = "io.flutter", module = "flutter_embedding_release")\n}\ndependencies {\n    releaseImplementation(files("libs/flutter_embedding_release_patched.jar"))\n}\n' >> android/app/build.gradle.kts
-
                   echo "=== Flutter engine patching complete ==="
 
             - name: Apply Patch
@@ -197,6 +190,55 @@ jobs:
 
             - name: Flutter Build APK (Android 6 Compatible)
               run: |
+                  # Phase 1: Run flutter build to trigger Gradle dependency download
+                  # This will fail or succeed, but either way Gradle will have
+                  # downloaded flutter_embedding_release to its cache.
+                  flutter build apk --release --split-per-abi --dart-define-from-file=pili_release.json --no-pub || true
+                  
+                  echo "=== Phase 2: Replacing JAR in Gradle cache ==="
+                  # Find the cached JAR
+                  CACHED_JAR=$(find ~/.gradle/caches/modules-2/files-2.1/io.flutter/flutter_embedding_release -name "*.jar" -not -name "*sources*" -not -name "*javadoc*" 2>/dev/null | head -n 1)
+                  
+                  if [ -z "$CACHED_JAR" ]; then
+                    echo "Could not find cached flutter_embedding_release JAR!"
+                    find ~/.gradle/caches/modules-2/files-2.1/io.flutter/ -type f 2>/dev/null | head -n 20
+                    exit 1
+                  fi
+                  
+                  echo "Found cached JAR: $CACHED_JAR"
+                  OLD_SHA1=$(basename $(dirname "$CACHED_JAR"))
+                  echo "Old SHA1 directory: $OLD_SHA1"
+                  
+                  # Replace with our patched version
+                  cp /tmp/flutter_embedding_release.jar "$CACHED_JAR"
+                  
+                  # Compute new SHA1 and rename the directory
+                  NEW_SHA1=$(sha1sum "$CACHED_JAR" | cut -d' ' -f1)
+                  echo "New SHA1: $NEW_SHA1"
+                  
+                  OLD_DIR=$(dirname "$CACHED_JAR")
+                  NEW_DIR="$(dirname "$OLD_DIR")/$NEW_SHA1"
+                  if [ "$OLD_DIR" != "$NEW_DIR" ]; then
+                    mv "$OLD_DIR" "$NEW_DIR"
+                    echo "Renamed cache dir: $OLD_SHA1 -> $NEW_SHA1"
+                  fi
+                  
+                  # Also update the SHA1 metadata file if it exists
+                  SHA1_FILE=$(find ~/.gradle/caches/modules-2/metadata-*/descriptors/io.flutter/flutter_embedding_release -name "*.sha1" 2>/dev/null | head -n 1)
+                  if [ -n "$SHA1_FILE" ]; then
+                    echo "$NEW_SHA1" > "$SHA1_FILE"
+                    echo "Updated SHA1 metadata file"
+                  fi
+                  
+                  # Wipe all build caches and transforms to force recompilation
+                  echo "=== Wiping build cache and transforms ==="
+                  rm -rf ~/.gradle/caches/build-cache-* 2>/dev/null || true
+                  rm -rf ~/.gradle/caches/transforms-* 2>/dev/null || true
+                  rm -rf ~/.gradle/caches/*/transforms/ 2>/dev/null || true
+                  rm -rf build/ 2>/dev/null || true
+                  
+                  # Phase 3: Rebuild with patched JAR
+                  echo "=== Phase 3: Rebuilding with patched JAR ==="
                   flutter build apk --release --split-per-abi --dart-define-from-file=pili_release.json --no-pub
 
             - name: 重命名 APK
