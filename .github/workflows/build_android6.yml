@@ -47,14 +47,8 @@ jobs:
 
             - name: 修补 Flutter 引擎以兼容 Android 6 (API 23)
               run: |
-                  echo "=== Downloading Gradle Dependencies ==="
-                  flutter pub get
-                  cd android && ./gradlew :app:dependencies || true
-                  ./gradlew --stop || true
-                  cd ..
-
                   echo "=== Setting up Javassist ==="
-                  wget https://repo1.maven.org/maven2/org/javassist/javassist/3.29.2-GA/javassist-3.29.2-GA.jar -O /tmp/javassist.jar
+                  wget -q https://repo1.maven.org/maven2/org/javassist/javassist/3.29.2-GA/javassist-3.29.2-GA.jar -O /tmp/javassist.jar
 
                   echo "=== Writing Patcher.java ==="
                   cat > /tmp/Patcher.java << 'JAVAEOF'
@@ -126,79 +120,71 @@ jobs:
 
                   javac -cp /tmp/javassist.jar /tmp/Patcher.java
 
-                  echo "=== Patching Flutter engine JARs for API 23 compatibility ==="
+                  echo "=== Downloading Flutter engine JAR ==="
                   ANDROID_JAR=$(ls -1 $ANDROID_HOME/platforms/android-*/android.jar 2>/dev/null | sort -V | tail -n 1)
                   echo "Using Android JAR: $ANDROID_JAR"
-                  
-                  # Directly download the Flutter engine JAR from Google Maven to avoid Gradle cache reliance
-                  ENGINE_VERSION=$(cat $FLUTTER_ROOT/bin/internal/engine.version)
-                  VERSION="1.0.0-$ENGINE_VERSION"
+
+                  # Read engine version from engine.stamp (what FlutterPlugin.kt actually uses)
+                  ENGINE_STAMP=$(cat $FLUTTER_ROOT/bin/cache/engine.stamp)
+                  VERSION="1.0.0-$ENGINE_STAMP"
                   echo "Detected Flutter engine version: $VERSION"
                   
-                  LOCAL_REPO="$GITHUB_WORKSPACE/android/local_repo/io/flutter/flutter_embedding_release/$VERSION"
-                  mkdir -p "$LOCAL_REPO"
-                  
+                  # Download the original JAR directly from Google
                   URL_BASE="https://storage.googleapis.com/download.flutter.io/io/flutter/flutter_embedding_release/$VERSION"
-                  curl -sL "$URL_BASE/flutter_embedding_release-$VERSION.jar" -o "$LOCAL_REPO/flutter_embedding_release-$VERSION.jar"
-                  curl -sL "$URL_BASE/flutter_embedding_release-$VERSION.pom" -o "$LOCAL_REPO/flutter_embedding_release-$VERSION.pom"
+                  curl -sL "$URL_BASE/flutter_embedding_release-$VERSION.jar" -o /tmp/flutter_embedding_release.jar
                   
-                  if [ ! -s "$LOCAL_REPO/flutter_embedding_release-$VERSION.jar" ]; then
-                    echo "Failed to download flutter_embedding_release JAR!"
+                  if [ ! -s /tmp/flutter_embedding_release.jar ]; then
+                    # Fallback: try engine.version instead of engine.stamp
+                    ENGINE_VERSION=$(cat $FLUTTER_ROOT/bin/internal/engine.version)
+                    VERSION="1.0.0-$ENGINE_VERSION"
+                    echo "Retrying with engine.version: $VERSION"
+                    URL_BASE="https://storage.googleapis.com/download.flutter.io/io/flutter/flutter_embedding_release/$VERSION"
+                    curl -sL "$URL_BASE/flutter_embedding_release-$VERSION.jar" -o /tmp/flutter_embedding_release.jar
+                  fi
+                  
+                  if [ ! -s /tmp/flutter_embedding_release.jar ]; then
+                    echo "FATAL: Failed to download flutter_embedding_release JAR!"
                     exit 1
                   fi
+                  echo "Downloaded JAR size: $(wc -c < /tmp/flutter_embedding_release.jar) bytes"
                   
-                  RAW_JAR="$LOCAL_REPO/flutter_embedding_release-$VERSION.jar"
-                  echo "Successfully downloaded JAR to $RAW_JAR"
-                  
-                  echo "Found raw JAR: $RAW_JAR"
-                  
-                  
-                  # Patch the jar in the local maven repo
-                  LOCAL_JAR="$LOCAL_REPO/flutter_embedding_release-$VERSION.jar"
+                  echo "=== Patching JAR with Javassist ==="
                   mkdir -p /tmp/patched_classes
                   rm -rf /tmp/patched_classes/*
-                  java -cp /tmp/javassist.jar:/tmp Patcher "$LOCAL_JAR" "$ANDROID_JAR"
-                  if [ "$(ls -A /tmp/patched_classes)" ]; then
-                     jar uf "$LOCAL_JAR" -C /tmp/patched_classes .
-                     echo "Successfully updated local repo JAR"
+                  java -cp /tmp/javassist.jar:/tmp Patcher /tmp/flutter_embedding_release.jar "$ANDROID_JAR"
+                  
+                  if [ "$(ls -A /tmp/patched_classes 2>/dev/null)" ]; then
+                     jar uf /tmp/flutter_embedding_release.jar -C /tmp/patched_classes .
+                     echo "=== JAR patched successfully ==="
+                  else
+                     echo "FATAL: No classes were patched!"
+                     exit 1
                   fi
                   
-                  # Rename the version to guarantee a cache miss in Gradle/R8!
-                  NEW_VERSION="${VERSION}-patched"
-                  NEW_REPO="$GITHUB_WORKSPACE/android/local_repo/io/flutter/flutter_embedding_release/$NEW_VERSION"
-                  mv "$LOCAL_REPO" "$NEW_REPO"
-                  mv "$NEW_REPO/flutter_embedding_release-$VERSION.jar" "$NEW_REPO/flutter_embedding_release-$NEW_VERSION.jar"
-                  mv "$NEW_REPO/flutter_embedding_release-$VERSION.pom" "$NEW_REPO/flutter_embedding_release-$NEW_VERSION.pom"
+                  # Verify the patch by checking that getLocales is gone
+                  echo "=== Verifying patch ==="
+                  mkdir -p /tmp/verify
+                  cd /tmp/verify
+                  jar xf /tmp/flutter_embedding_release.jar io/flutter/plugin/localization/LocalizationPlugin.class
+                  if javap -c io/flutter/plugin/localization/LocalizationPlugin.class 2>/dev/null | grep -q "getLocales"; then
+                    echo "WARNING: getLocales still found in patched JAR!"
+                  else
+                    echo "VERIFIED: getLocales has been removed from LocalizationPlugin"
+                  fi
+                  cd $GITHUB_WORKSPACE
                   
-                  # Update the POM file version
-                  sed -i "s|<version>$VERSION</version>|<version>$NEW_VERSION</version>|g" "$NEW_REPO/flutter_embedding_release-$NEW_VERSION.pom"
+                  # Copy patched JAR to project's libs directory
+                  mkdir -p android/app/libs
+                  cp /tmp/flutter_embedding_release.jar android/app/libs/flutter_embedding_release_patched.jar
+                  echo "=== Copied patched JAR to android/app/libs/ ==="
 
-                  
-                  # Inject the local Maven repository directly into settings.gradle.kts
-                  cat << 'SETTINGS_PATCH' >> android/settings.gradle.kts
-                  
-                  dependencyResolutionManagement {
-                      repositories {
-                          exclusiveContent {
-                              forRepository {
-                                  maven { url = uri("file://${System.getenv("GITHUB_WORKSPACE")}/android/local_repo") }
-                              }
-                              filter {
-                                  includeModule("io.flutter", "flutter_embedding_release")
-                              }
-                          }
-                      }
-                  }
-                  
-                  SETTINGS_PATCH
-                  
-                  echo "=== Hacking Flutter SDK Gradle scripts to use -patched version ==="
-                  find $FLUTTER_ROOT/packages/flutter_tools/gradle -type f \( -name "*.groovy" -o -name "*.gradle" -o -name "*.kts" \) -exec sed -i 's/1.0.0-${flutterEngineHash}/1.0.0-${flutterEngineHash}-patched/g' {} +
-                  find $FLUTTER_ROOT/packages/flutter_tools/gradle -type f \( -name "*.groovy" -o -name "*.gradle" -o -name "*.kts" \) -exec sed -i 's/1.0.0-\$flutterEngineHash/1.0.0-\$flutterEngineHash-patched/g' {} +
-                  
-                  echo "=== Purging Gradle Modules Cache for flutter_embedding_release ==="
-                  rm -rf ~/.gradle/caches/modules-2/files-2.1/io.flutter/flutter_embedding_release 2>/dev/null || true
-                  
+                  # Inject exclude + local JAR into build.gradle.kts
+                  # This is the ONLY reliable method: tell Gradle to completely
+                  # ignore the official flutter_embedding_release from Maven,
+                  # and use our patched local file instead.
+                  echo "=== Injecting dependency override into build.gradle.kts ==="
+                  printf '\n// Android 6 Compatibility Patch\nconfigurations.all {\n    exclude(group = "io.flutter", module = "flutter_embedding_release")\n}\ndependencies {\n    releaseImplementation(files("libs/flutter_embedding_release_patched.jar"))\n}\n' >> android/app/build.gradle.kts
+
                   echo "=== Flutter engine patching complete ==="
 
             - name: Apply Patch
@@ -209,20 +195,8 @@ jobs:
               shell: pwsh
               run: lib/scripts/build.ps1 android
 
-            - name: Disable Gradle Build Cache Completely
-              run: |
-                  mkdir -p ~/.gradle
-                  echo "org.gradle.caching=false" >> ~/.gradle/gradle.properties
-                  echo "org.gradle.configuration-cache=false" >> ~/.gradle/gradle.properties
-                  # Also kill any running daemons again just in case
-                  cd android && ./gradlew --stop || true
-
             - name: Flutter Build APK (Android 6 Compatible)
               run: |
-                  echo "=== Wiping Gradle build cache to force R8 recompilation ==="
-                  rm -rf ~/.gradle/caches/build-cache-* 2>/dev/null || true
-                  rm -rf ~/.gradle/caches/transforms-* 2>/dev/null || true
-                  rm -rf ~/.gradle/caches/*/transforms/ 2>/dev/null || true
                   flutter build apk --release --split-per-abi --dart-define-from-file=pili_release.json --no-pub
 
             - name: 重命名 APK
