@@ -127,20 +127,27 @@ if (android6CompatibilityEnabled) {
 
     tasks.register("verifyAndroid6FlutterEmbedding") {
         doLast {
-            val artifacts = configurations
+            val componentIds = configurations
                 .getByName("releaseRuntimeClasspath")
-                .resolvedConfiguration
-                .resolvedArtifacts
-                .filter {
-                    it.moduleVersion.id.group == "io.flutter" &&
-                        it.name == "flutter_embedding_release"
+                .incoming
+                .resolutionResult
+                .allComponents
+                .mapNotNull { component ->
+                    val id = component.id
+                    if (id is org.gradle.api.artifacts.component.ModuleComponentIdentifier &&
+                        id.group == "io.flutter" &&
+                        id.module == "flutter_embedding_release"
+                    ) {
+                        id
+                    } else {
+                        null
+                    }
                 }
-            check(artifacts.size == 1) {
-                "Expected one Flutter release embedding, found ${artifacts.size}"
+            check(componentIds.size == 1) {
+                "Expected one Flutter release embedding, found ${componentIds.size}"
             }
 
-            val artifact = artifacts.single()
-            val version = artifact.moduleVersion.id.version
+            val version = componentIds.single().version
             check(version.endsWith("-android6")) {
                 "Resolved unpatched Flutter embedding $version"
             }
@@ -148,8 +155,14 @@ if (android6CompatibilityEnabled) {
                 "android6-engine-repo/io/flutter/flutter_embedding_release/" +
                     "$version/flutter_embedding_release-$version.jar",
             )
+            val checkConfiguration = project.configurations.detachedConfiguration(
+                project.dependencies.create("io.flutter:flutter_embedding_release:$version"),
+            ).apply {
+                isTransitive = false
+            }
+            val resolvedFile = checkConfiguration.singleFile
             check(repositoryFile.isFile &&
-                repositoryFile.readBytes().contentEquals(artifact.file.readBytes())) {
+                repositoryFile.readBytes().contentEquals(resolvedFile.readBytes())) {
                 "Resolved Flutter embedding does not match the patched local artifact"
             }
             println("Verified patched Flutter embedding: $version")
