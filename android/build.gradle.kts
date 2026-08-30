@@ -1,7 +1,16 @@
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
+val android6CompatibilityEnabled =
+    providers.gradleProperty("android6Compatibility").isPresent
+
 allprojects {
     repositories {
+        if (android6CompatibilityEnabled) {
+            maven {
+                name = "android6PatchedFlutter"
+                url = uri(rootProject.file("android6-engine-repo"))
+            }
+        }
         google()
         mavenCentral()
     }

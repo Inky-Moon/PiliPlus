@@ -10,7 +10,8 @@ jobs:
     android6:
         name: Build Android 6.0+ APK
         runs-on: ubuntu-latest
-        permissions: write-all
+        permissions:
+            contents: write
 
         steps:
             - name: 代码迁出
@@ -18,7 +19,7 @@ jobs:
               with:
                   fetch-depth: 0
 
-            - name: 构建Java环境
+            - name: 构建 Java 环境
               uses: actions/setup-java@v4
               with:
                   distribution: "zulu"
@@ -28,9 +29,8 @@ jobs:
                       android/*.gradle*
                       android/**/gradle-wrapper.properties
 
-            - name: 安装Flutter
+            - name: 安装 Flutter
               uses: subosito/flutter-action@v2
-              id: flutter-action
               with:
                   channel: stable
                   flutter-version-file: pubspec.yaml
@@ -43,217 +43,49 @@ jobs:
 
             - name: 安装 Android SDK 37
               run: |
-                  echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-37" || true
+                  echo "y" | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-37"
 
-            - name: 修补 Flutter 引擎以兼容 Android 6 (API 23)
-              run: |
-                  echo "=== Setting up Javassist ==="
-                  wget -q https://repo1.maven.org/maven2/org/javassist/javassist/3.29.2-GA/javassist-3.29.2-GA.jar -O /tmp/javassist.jar
-
-                  echo "=== Writing Patcher.java ==="
-                  cat > /tmp/Patcher.java << 'JAVAEOF'
-                  import java.io.*;
-                  import javassist.*;
-                  import javassist.expr.*;
-
-                  public class Patcher {
-                      public static void main(String[] args) throws Exception {
-                          String jarPath = args[0];
-                          String androidJarPath = args[1];
-                          ClassPool pool = ClassPool.getDefault();
-                          pool.insertClassPath(jarPath);
-                          pool.insertClassPath(androidJarPath);
-
-                          boolean patched = false;
-                          
-                          try {
-                              CtClass cc = pool.get("io.flutter.plugin.localization.LocalizationPlugin");
-                              cc.getDeclaredMethod("resolveNativeLocale").setBody("{ if ($1 == null || $1.isEmpty()) return null; return (java.util.Locale)$1.get(0); }");
-                              cc.getDeclaredMethod("sendLocalesToFlutter").setBody("{ java.util.List locales = new java.util.ArrayList(); locales.add($1.locale); this.localizationChannel.sendLocales(locales); }");
-                              cc.writeFile("/tmp/patched_classes");
-                              System.out.println("Patched LocalizationPlugin");
-                              patched = true;
-                          } catch (Exception e) { e.printStackTrace(); }
-
-                          try {
-                              CtClass cc = pool.get("io.flutter.view.AccessibilityBridge");
-                              cc.instrument(new ExprEditor() {
-                                  public void edit(MethodCall m) throws CannotCompileException {
-                                      if (m.getMethodName().equals("setImportantForAccessibility")) {
-                                          m.replace("{ }");
-                                      }
-                                  }
-                              });
-                              cc.writeFile("/tmp/patched_classes");
-                              System.out.println("Patched AccessibilityBridge");
-                              patched = true;
-                          } catch (Exception e) { e.printStackTrace(); }
-                          
-                          try {
-                              CtClass cc = pool.get("io.flutter.view.AccessibilityViewEmbedder");
-                              cc.instrument(new ExprEditor() {
-                                  public void edit(MethodCall m) throws CannotCompileException {
-                                      if (m.getMethodName().equals("setImportantForAccessibility")) {
-                                          m.replace("{ }");
-                                      }
-                                  }
-                              });
-                              cc.writeFile("/tmp/patched_classes");
-                              System.out.println("Patched AccessibilityViewEmbedder");
-                              patched = true;
-                          } catch (Exception e) { e.printStackTrace(); }
-
-                          try {
-                              CtClass cc = pool.get("io.flutter.util.PathUtils");
-                              cc.getDeclaredMethod("getDataDirectory").setBody("{ return $1.getApplicationInfo().dataDir; }");
-                              cc.writeFile("/tmp/patched_classes");
-                              System.out.println("Patched PathUtils");
-                              patched = true;
-                          } catch (Exception e) { e.printStackTrace(); }
-                          
-                          if (!patched) {
-                              System.out.println("No classes patched!");
-                          }
-                      }
-                  }
-                  JAVAEOF
-
-                  javac -cp /tmp/javassist.jar /tmp/Patcher.java
-
-                  echo "=== Downloading Flutter engine JAR ==="
-                  ANDROID_JAR=$(ls -1 $ANDROID_HOME/platforms/android-*/android.jar 2>/dev/null | sort -V | tail -n 1)
-                  echo "Using Android JAR: $ANDROID_JAR"
-
-                  # Read engine version from engine.stamp (what FlutterPlugin.kt actually uses)
-                  ENGINE_STAMP=$(cat $FLUTTER_ROOT/bin/cache/engine.stamp)
-                  VERSION="1.0.0-$ENGINE_STAMP"
-                  echo "Detected Flutter engine version: $VERSION"
-                  
-                  # Download the original JAR directly from Google
-                  URL_BASE="https://storage.googleapis.com/download.flutter.io/io/flutter/flutter_embedding_release/$VERSION"
-                  curl -sL "$URL_BASE/flutter_embedding_release-$VERSION.jar" -o /tmp/flutter_embedding_release.jar
-                  
-                  if [ ! -s /tmp/flutter_embedding_release.jar ]; then
-                    # Fallback: try engine.version instead of engine.stamp
-                    ENGINE_VERSION=$(cat $FLUTTER_ROOT/bin/internal/engine.version)
-                    VERSION="1.0.0-$ENGINE_VERSION"
-                    echo "Retrying with engine.version: $VERSION"
-                    URL_BASE="https://storage.googleapis.com/download.flutter.io/io/flutter/flutter_embedding_release/$VERSION"
-                    curl -sL "$URL_BASE/flutter_embedding_release-$VERSION.jar" -o /tmp/flutter_embedding_release.jar
-                  fi
-                  
-                  if [ ! -s /tmp/flutter_embedding_release.jar ]; then
-                    echo "FATAL: Failed to download flutter_embedding_release JAR!"
-                    exit 1
-                  fi
-                  echo "Downloaded JAR size: $(wc -c < /tmp/flutter_embedding_release.jar) bytes"
-                  
-                  echo "=== Patching JAR with Javassist ==="
-                  mkdir -p /tmp/patched_classes
-                  rm -rf /tmp/patched_classes/*
-                  java -cp /tmp/javassist.jar:/tmp Patcher /tmp/flutter_embedding_release.jar "$ANDROID_JAR"
-                  
-                  if [ "$(ls -A /tmp/patched_classes 2>/dev/null)" ]; then
-                     jar uf /tmp/flutter_embedding_release.jar -C /tmp/patched_classes .
-                     echo "=== JAR patched successfully ==="
-                  else
-                     echo "FATAL: No classes were patched!"
-                     exit 1
-                  fi
-                  
-                  # Verify the patch by checking that getLocales is gone
-                  echo "=== Verifying patch ==="
-                  mkdir -p /tmp/verify
-                  cd /tmp/verify
-                  jar xf /tmp/flutter_embedding_release.jar io/flutter/plugin/localization/LocalizationPlugin.class
-                  if javap -c io/flutter/plugin/localization/LocalizationPlugin.class 2>/dev/null | grep -q "getLocales"; then
-                    echo "WARNING: getLocales still found in patched JAR!"
-                  else
-                    echo "VERIFIED: getLocales has been removed from LocalizationPlugin"
-                  fi
-                  cd $GITHUB_WORKSPACE
-                  
-                  # Copy patched JAR to project's libs directory
-                  mkdir -p android/app/libs
-                  cp /tmp/flutter_embedding_release.jar android/app/libs/flutter_embedding_release_patched.jar
-                  echo "=== Copied patched JAR to android/app/libs/ ==="
-
-                  echo "=== Flutter engine patching complete ==="
-
-            - name: Apply Patch
+            - name: 应用项目补丁
               shell: pwsh
               run: lib/scripts/patch.ps1 android
+
+            - name: 准备 Android 6 Flutter Engine
+              run: bash tool/android6/prepare_engine.sh
+
+            - name: 验证 Flutter Engine 依赖
+              working-directory: android
+              run: >-
+                  ./gradlew --refresh-dependencies -Pandroid6Compatibility=1
+                  :app:verifyAndroid6FlutterEmbedding --no-daemon
 
             - name: 生成版本信息
               shell: pwsh
               run: lib/scripts/build.ps1 android
 
-            - name: Flutter Build APK (Android 6 Compatible)
+            - name: 构建 Android 6 APK
               run: |
-                  # Phase 1: Run flutter build to trigger Gradle dependency download
-                  # This will fail or succeed, but either way Gradle will have
-                  # downloaded flutter_embedding_release to its cache.
-                  flutter build apk --release --split-per-abi --dart-define-from-file=pili_release.json --no-pub || true
-                  
-                  echo "=== Phase 2: Replacing JAR in Gradle cache ==="
-                  # Find the cached JAR
-                  CACHED_JAR=$(find ~/.gradle/caches/modules-2/files-2.1/io.flutter/flutter_embedding_release -name "*.jar" -not -name "*sources*" -not -name "*javadoc*" 2>/dev/null | head -n 1)
-                  
-                  if [ -z "$CACHED_JAR" ]; then
-                    echo "Could not find cached flutter_embedding_release JAR!"
-                    find ~/.gradle/caches/modules-2/files-2.1/io.flutter/ -type f 2>/dev/null | head -n 20
-                    exit 1
-                  fi
-                  
-                  echo "Found cached JAR: $CACHED_JAR"
-                  OLD_SHA1=$(basename $(dirname "$CACHED_JAR"))
-                  echo "Old SHA1 directory: $OLD_SHA1"
-                  
-                  # Replace with our patched version
-                  cp /tmp/flutter_embedding_release.jar "$CACHED_JAR"
-                  
-                  # Compute new SHA1 and rename the directory
-                  NEW_SHA1=$(sha1sum "$CACHED_JAR" | cut -d' ' -f1)
-                  echo "New SHA1: $NEW_SHA1"
-                  
-                  OLD_DIR=$(dirname "$CACHED_JAR")
-                  NEW_DIR="$(dirname "$OLD_DIR")/$NEW_SHA1"
-                  if [ "$OLD_DIR" != "$NEW_DIR" ]; then
-                    mv "$OLD_DIR" "$NEW_DIR"
-                    echo "Renamed cache dir: $OLD_SHA1 -> $NEW_SHA1"
-                  fi
-                  
-                  # Also update the SHA1 metadata file if it exists
-                  SHA1_FILE=$(find ~/.gradle/caches/modules-2/metadata-*/descriptors/io.flutter/flutter_embedding_release -name "*.sha1" 2>/dev/null | head -n 1)
-                  if [ -n "$SHA1_FILE" ]; then
-                    echo "$NEW_SHA1" > "$SHA1_FILE"
-                    echo "Updated SHA1 metadata file"
-                  fi
-                  
-                  # Wipe all build caches and transforms to force recompilation
-                  echo "=== Wiping build cache and transforms ==="
-                  rm -rf ~/.gradle/caches/build-cache-* 2>/dev/null || true
-                  rm -rf ~/.gradle/caches/transforms-* 2>/dev/null || true
-                  rm -rf ~/.gradle/caches/*/transforms/ 2>/dev/null || true
-                  rm -rf build/ 2>/dev/null || true
-                  
-                  # Phase 3: Rebuild with patched JAR
-                  echo "=== Phase 3: Rebuilding with patched JAR ==="
-                  flutter build apk --release --split-per-abi --dart-define-from-file=pili_release.json --no-pub
+                  flutter build apk \
+                    --release \
+                    --split-per-abi \
+                    --dart-define-from-file=pili_release.json \
+                    --android-project-arg android6Compatibility=1 \
+                    --no-pub
+
+            - name: 验证最终 APK 字节码
+              run: bash tool/android6/verify_apk.sh build/app/outputs/flutter-apk/app-*-release.apk
 
             - name: 重命名 APK
+              shell: bash
               run: |
                   for file in build/app/outputs/flutter-apk/app-*-release.apk; do
                     abi=$(echo "$file" | sed -E 's|.*app-(.*)-release\.apk|\1|')
                     mv "$file" "PiliPlus_android6_${{ env.version }}_${abi}.apk"
                   done
-              shell: bash
-
 
             - name: 发布到 Releases
               uses: softprops/action-gh-release@v2
               with:
                   tag_name: custom-build-${{ github.run_number }}
                   name: "定制版构建 #${{ github.run_number }}"
-                  body: "改进了一些体验，修复了一些bug，增加了一些功能" 
+                  body: "改进了一些体验，修复了一些 bug，增加了一些功能"
                   files: PiliPlus_android6_*.apk

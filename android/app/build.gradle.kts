@@ -109,6 +109,54 @@ flutter {
     source = "../.."
 }
 
+val android6CompatibilityEnabled =
+    providers.gradleProperty("android6Compatibility").isPresent
+
+if (android6CompatibilityEnabled) {
+    configurations.configureEach {
+        resolutionStrategy.eachDependency {
+            if (requested.group == "io.flutter" &&
+                requested.name == "flutter_embedding_release" &&
+                !requested.version.orEmpty().endsWith("-android6")
+            ) {
+                useVersion("${requested.version}-android6")
+                because("Use the API 23-compatible Flutter embedding")
+            }
+        }
+    }
+
+    tasks.register("verifyAndroid6FlutterEmbedding") {
+        doLast {
+            val artifacts = configurations
+                .getByName("releaseRuntimeClasspath")
+                .resolvedConfiguration
+                .resolvedArtifacts
+                .filter {
+                    it.moduleVersion.id.group == "io.flutter" &&
+                        it.name == "flutter_embedding_release"
+                }
+            check(artifacts.size == 1) {
+                "Expected one Flutter release embedding, found ${artifacts.size}"
+            }
+
+            val artifact = artifacts.single()
+            val version = artifact.moduleVersion.id.version
+            check(version.endsWith("-android6")) {
+                "Resolved unpatched Flutter embedding $version"
+            }
+            val repositoryFile = rootProject.file(
+                "android6-engine-repo/io/flutter/flutter_embedding_release/" +
+                    "$version/flutter_embedding_release-$version.jar",
+            )
+            check(repositoryFile.isFile &&
+                repositoryFile.readBytes().contentEquals(artifact.file.readBytes())) {
+                "Resolved Flutter embedding does not match the patched local artifact"
+            }
+            println("Verified patched Flutter embedding: $version")
+        }
+    }
+}
+
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }
