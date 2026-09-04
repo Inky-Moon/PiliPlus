@@ -5,6 +5,7 @@ import 'package:PiliPlus/common/widgets/image/network_img_layer.dart';
 import 'package:PiliPlus/common/widgets/scroll_physics.dart'
     show platformClampingPhysics;
 import 'package:PiliPlus/http/live.dart';
+import 'package:PiliPlus/http/loading_state.dart';
 import 'package:PiliPlus/models_new/live/live_danmaku/danmaku_msg.dart';
 import 'package:PiliPlus/models_new/live/live_superchat/item.dart';
 import 'package:PiliPlus/pages/live_room/controller.dart';
@@ -52,7 +53,9 @@ class LiveRoomChatPanel extends StatelessWidget {
         Obx(
           () => LiveListView.separated(
             key: const PageStorageKey(LiveRoomChatPanel),
-            padding: const EdgeInsets.symmetric(horizontal: 12),
+            // multiply by 2 to account for separators
+            initialIndex: liveRoomController.trimDmIndex * 2,
+            padding: const .symmetric(horizontal: 12),
             controller: liveRoomController.scrollController,
             separatorBuilder: (_, _) => const SizedBox(height: 8),
             itemCount: liveRoomController.builtLength =
@@ -365,7 +368,8 @@ class LiveRoomChatPanel extends StatelessWidget {
               roomid: roomId,
               type: 1,
             );
-            if (res.isSuccess) {
+            if (res case Success(:final response)) {
+              liveRoomController.addBlockedUid(response.uid);
               SmartDialog.showToast('屏蔽成功');
             } else {
               res.toast();
