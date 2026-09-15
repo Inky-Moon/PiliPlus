@@ -1006,6 +1006,8 @@ abstract final class Pref {
 
   static String? get downloadPath => _setting.get(SettingBoxKey.downloadPath);
 
+  static String? get imageSavePath => _setting.get(SettingBoxKey.imageSavePath);
+
   static String? get liveCdnUrl => _setting.get(SettingBoxKey.liveCdnUrl);
 
   static bool get showBatteryLevel => _setting.get(
@@ -1061,4 +1063,7 @@ abstract final class Pref {
       defaultValue: const <String, String>{},
     ),
   );
+
+  static bool get enableEmoteTooltip =>
+      _setting.get(SettingBoxKey.enableEmoteTooltip, defaultValue: false);
 }
