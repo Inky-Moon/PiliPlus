@@ -3,11 +3,12 @@ import 'package:PiliPlus/pages/video/introduction/ugc/widgets/menu_row.dart';
 import 'package:PiliPlus/plugin/pl_player/controller.dart';
 import 'package:PiliPlus/plugin/pl_player/utils/danmaku_options.dart';
 import 'package:PiliPlus/utils/extension/num_ext.dart';
+import 'package:PiliPlus/utils/font_utils.dart';
 import 'package:PiliPlus/utils/page_utils.dart';
 import 'package:PiliPlus/utils/theme_utils.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
-import "package:file_picker/file_picker.dart";
-import "package:PiliPlus/utils/font_utils.dart";
 import 'package:material_ui/material_ui.dart';
 
 mixin HeaderMixin<T extends StatefulWidget> on State<T> {
@@ -457,9 +458,9 @@ mixin HeaderMixin<T extends StatefulWidget> on State<T> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         const Text('自定义弹幕字体 (ttf/otf)'),
-                        resetBtn(theme, '系统默认', () {
-                          DanmakuOptions.danmakuFontPath = null;
-                          DanmakuOptions.danmakuFontFamily = null;
+                        resetBtn(theme, '系统默认', () async {
+                          await FontUtils.resetDanmakuFont();
+                          if (!context.mounted) return;
                           setState(() {});
                           setOptions();
                         }),
@@ -491,10 +492,12 @@ mixin HeaderMixin<T extends StatefulWidget> on State<T> {
                               if (result != null) {
                                 final path = result.xFile.path;
                                 final success = await FontUtils.loadNewFont(path);
+                                if (!context.mounted) return;
                                 if (success) {
-                                  DanmakuOptions.danmakuFontPath = path;
                                   setState(() {});
                                   setOptions();
+                                } else {
+                                  SmartDialog.showToast('字体导入失败，请重新选择可读取的字体文件');
                                 }
                               }
                             },

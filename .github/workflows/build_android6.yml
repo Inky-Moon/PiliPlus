@@ -61,6 +61,9 @@ jobs:
             - name: 准备 Android 6 Flutter Engine
               run: bash tool/android6/prepare_engine.sh
 
+            - name: 验证弹幕字体持久化和重绘
+              run: flutter test test/utils/danmaku_font_test.dart test/widgets/danmaku_font_rendering_test.dart
+
             - name: 生成版本信息
               shell: pwsh
               run: lib/scripts/build.ps1 android

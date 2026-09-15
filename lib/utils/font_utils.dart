@@ -2,6 +2,7 @@ import 'dart:ffi';
 import 'dart:io' show Directory, File;
 import 'dart:ui' show loadFontFromList;
 
+import 'package:PiliPlus/plugin/pl_player/utils/danmaku_options.dart';
 import 'package:PiliPlus/utils/android/bindings.g.dart';
 import 'package:PiliPlus/utils/fontconfig.g.dart';
 import 'package:PiliPlus/utils/path_utils.dart';
@@ -18,17 +19,15 @@ import 'package:jni/jni.dart';
 import 'package:path/path.dart' as path;
 import 'package:win32/win32.dart';
 
-import 'package:PiliPlus/utils/storage_pref.dart';
-import 'package:PiliPlus/plugin/pl_player/utils/danmaku_options.dart';
-
 abstract final class FontUtils {
   static final _fonts = <String>{};
   static bool _initialized = false;
-  static bool _customFontLoaded = false;
-  static String? _loadedCustomFontPath;
+  static int _danmakuFontGeneration = 0;
 
   static const _kFontExts = ['ttf', 'ttc', 'otf'];
   static final _kFontDir = path.join(appSupportDirPath, 'font');
+  // Keep danmaku fonts separate from both temporary files and global app fonts.
+  static final _danmakuFontDir = path.join(appSupportDirPath, 'danmaku_fonts');
   static final _loadedFonts = <String>{};
   static final customFonts = Pref.customAppFont;
 
@@ -235,62 +234,54 @@ abstract final class FontUtils {
 
   /// Load custom danmaku font at startup
   static Future<void> loadCustomFont() async {
-    final path = Pref.danmakuFontPath;
-    if (path == null || path.isEmpty) {
-      DanmakuOptions.danmakuFontFamily = null;
-      return;
-    }
-
-    if (_customFontLoaded && _loadedCustomFontPath == path) {
-      // Already loaded
-      return;
-    }
-
-    final file = File(path);
-    if (!file.existsSync()) {
-      DanmakuOptions.danmakuFontFamily = null;
-      return;
-    }
-
-    try {
-      final fontData = await file.readAsBytes();
-      final byteData = ByteData.view(fontData.buffer);
-      // Generate unique family name to prevent caching old font
-      final familyName = 'CustomDanmakuFont_${DateTime.now().millisecondsSinceEpoch}';
-      final fontLoader = FontLoader(familyName);
-      fontLoader.addFont(Future.value(byteData));
-      await fontLoader.load();
-      DanmakuOptions.danmakuFontFamily = familyName;
-      _loadedCustomFontPath = path;
-      _customFontLoaded = true;
-      return;
-    } catch (e) {
-      if (kDebugMode) debugPrint('Failed to load custom font: $e');
-      DanmakuOptions.danmakuFontFamily = null;
+    final savedPath = Pref.danmakuFontPath;
+    DanmakuOptions.danmakuFontPath = savedPath;
+    // Font registrations belong to this process, not to saved settings.
+    DanmakuOptions.danmakuFontFamily = null;
+    if (savedPath != null && savedPath.isNotEmpty) {
+      // Migrate readable legacy picker/cache paths on the first launch.
+      await loadNewFont(savedPath);
     }
   }
 
-  /// Load custom danmaku font at runtime (when file picker is used)
-  static Future<bool> loadNewFont(String path) async {
-    final file = File(path);
-    if (!file.existsSync()) return false;
-
+  /// Import and register a font, persisting only a durable file path.
+  static Future<bool> loadNewFont(String sourcePath) async {
     try {
-      final fontData = await file.readAsBytes();
-      final byteData = ByteData.view(fontData.buffer);
-      // Generate a new random family name to avoid caching issues when swapping fonts
-      final familyName = 'CustomDanmakuFont_${DateTime.now().millisecondsSinceEpoch}';
+      final fontData = await File(sourcePath).readAsBytes();
+      final generation = ++_danmakuFontGeneration;
+      final id = '${DateTime.now().microsecondsSinceEpoch}_$generation';
+      var savedPath = sourcePath;
+      if (!path.equals(path.dirname(sourcePath), _danmakuFontDir)) {
+        await Directory(_danmakuFontDir).create(recursive: true);
+        savedPath = path.join(
+          _danmakuFontDir,
+          '${id}_${path.basename(sourcePath)}',
+        );
+        await File(savedPath).writeAsBytes(fontData, flush: true);
+      }
+
+      final familyName = 'CustomDanmakuFont_$id';
       final fontLoader = FontLoader(familyName);
-      fontLoader.addFont(Future.value(byteData));
+      fontLoader.addFont(Future.value(ByteData.sublistView(fontData)));
       await fontLoader.load();
-      
+
+      await GStorage.setting.put(SettingBoxKey.danmakuFontPath, savedPath);
+      await GStorage.setting.delete(SettingBoxKey.danmakuFontFamily);
+      DanmakuOptions.danmakuFontPath = savedPath;
       DanmakuOptions.danmakuFontFamily = familyName;
-      _loadedCustomFontPath = path;
-      _customFontLoaded = true;
       return true;
     } catch (e) {
       if (kDebugMode) debugPrint('Failed to load new font: $e');
       return false;
     }
+  }
+
+  static Future<void> resetDanmakuFont() async {
+    await GStorage.setting.deleteAll([
+      SettingBoxKey.danmakuFontPath,
+      SettingBoxKey.danmakuFontFamily,
+    ]);
+    DanmakuOptions.danmakuFontPath = null;
+    DanmakuOptions.danmakuFontFamily = null;
   }
 }

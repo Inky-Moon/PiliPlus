@@ -10,7 +10,7 @@ abstract final class DanmakuOptions {
 
   static int danmakuWeight = Pref.danmakuWeight;
   static String? danmakuFontPath = Pref.danmakuFontPath;
-  static String? danmakuFontFamily = Pref.danmakuFontFamily;
+  static String? danmakuFontFamily;
   static double danmakuFontScaleFS = Pref.danmakuFontScaleFS;
   static double danmakuFontScale = Pref.danmakuFontScale;
   static int danmakuFontWeight = Pref.danmakuFontWeight;
@@ -65,7 +65,6 @@ abstract final class DanmakuOptions {
       SettingBoxKey.danmakuFixedV: danmakuFixedV,
       SettingBoxKey.danmakuWeight: danmakuWeight,
       SettingBoxKey.danmakuFontPath: danmakuFontPath,
-      SettingBoxKey.danmakuFontFamily: danmakuFontFamily,
       SettingBoxKey.danmakuOpacity: danmakuOpacity,
     });
   }
