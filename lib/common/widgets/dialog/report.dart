@@ -2,6 +2,7 @@ import 'package:PiliPlus/common/widgets/button/icon_button.dart';
 import 'package:PiliPlus/common/widgets/radio_widget.dart';
 import 'package:PiliPlus/http/loading_state.dart';
 import 'package:PiliPlus/utils/extension/string_ext.dart';
+import 'package:PiliPlus/utils/storage_pref.dart';
 import 'package:PiliPlus/utils/utils.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
@@ -22,7 +23,9 @@ Future<void> autoWrapReportDialog(
   BuildContext context,
   Map<String, Map<int, String>> options,
   OnReport onReport, {
-  bool ban = true,
+  ValueGetter<int>? mid,
+  VoidCallback? onLocalBlock,
+  VoidCallback? onRemove,
   String? reportUrl,
   ReasonCheck withContent = _kReportCheck,
   ReasonCheck contentRequired = _kReportCheck,
@@ -30,6 +33,7 @@ Future<void> autoWrapReportDialog(
   int? reasonType;
   String? reasonDesc;
   bool banUid = false;
+  final canBlock = mid != null || onLocalBlock != null;
   late final key = GlobalKey<FormFieldState<String>>();
 
   bool isWithContent = withContent(reasonType);
@@ -129,7 +133,7 @@ Future<void> autoWrapReportDialog(
               ),
             ),
           ),
-          if (ban)
+          if (canBlock)
             Padding(
               padding: const EdgeInsets.only(left: 14, top: 6),
               child: CheckBoxText(
@@ -140,6 +144,19 @@ Future<void> autoWrapReportDialog(
         ],
       ),
       actions: [
+        if (canBlock)
+          TextButton(
+            onPressed: () {
+              Get.back();
+              if (onLocalBlock != null) {
+                onLocalBlock();
+              } else {
+                Pref.setBlackMid(mid!());
+              }
+              onRemove?.call();
+            },
+            child: const Text('本地屏蔽'),
+          ),
         TextButton(
           onPressed: Get.back,
           child: Text(

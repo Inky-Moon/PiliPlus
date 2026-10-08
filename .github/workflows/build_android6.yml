@@ -62,7 +62,10 @@ jobs:
               run: bash tool/android6/prepare_engine.sh
 
             - name: 验证弹幕字体持久化和重绘
-              run: flutter test test/utils/danmaku_font_test.dart test/widgets/danmaku_font_rendering_test.dart
+              run: >-
+                  flutter test test/utils/danmaku_font_test.dart
+                  test/widgets/danmaku_font_rendering_test.dart
+                  test/widgets/report_local_block_test.dart
 
             - name: 生成版本信息
               shell: pwsh

@@ -6,6 +6,8 @@
 
 <br/>
 
+中文 | [English（上游说明）](README.en.md)
+
 ## ✨ 定制特性
 
 - 🚀 **Android 6 兼容**：修复原版在 Android 7 以下设备打开即闪退的问题
@@ -27,7 +29,7 @@
 
 ## 🛠️ 下载与安装
 
-请前往本仓库的 Actions 页面，下载最近一次成功构建里的 `app-release.apk`。
+请前往[本仓库 Releases](https://github.com/Inky-Moon/PiliPlus/releases) 下载最近一次成功构建的 APK；Galaxy Note 4 使用 `armeabi-v7a` 版本。
 
 <br/>
 

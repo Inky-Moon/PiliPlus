@@ -40,6 +40,13 @@ abstract final class DownloadHttp {
     );
     if (res case Success(:final response)) {
       final dash = response.dash;
+
+      // UGC segments were fetched from SponsorBlock before resolving the URL.
+      // Only PGC/PUGV use the playback API's clip_info_list.
+      if (entry.pageData == null) {
+        entry.segments = response.clipInfoList;
+      }
+
       if (dash != null) {
         final targetVideoQa = response.findAvailableVideoQuality(
           entry.preferedVideoQuality,
