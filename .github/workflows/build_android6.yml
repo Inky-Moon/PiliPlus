@@ -36,10 +36,11 @@ jobs:
                   flutter-version-file: pubspec.yaml
                   cache: true
 
-            - name: 安装 PowerShell
+            - name: 安装构建及测试依赖
               run: |
                   sudo apt-get update
-                  sudo apt-get install -y powershell
+                  # tray_manager's cnativeapi hook also builds for the Linux test host.
+                  sudo apt-get install -y powershell pkg-config libgtk-3-dev libx11-dev libxi-dev
 
             - name: 安装 Android SDK 37
               run: |
@@ -61,7 +62,7 @@ jobs:
             - name: 准备 Android 6 Flutter Engine
               run: bash tool/android6/prepare_engine.sh
 
-            - name: 验证弹幕字体持久化和重绘
+            - name: 验证弹幕字体与本地屏蔽
               run: >-
                   flutter test test/utils/danmaku_font_test.dart
                   test/widgets/danmaku_font_rendering_test.dart
