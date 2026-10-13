@@ -38,6 +38,6 @@ void main() {
     expect(find.text('本地屏蔽'), findsNothing);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
-    await Get.reset();
+    Get.reset();
   });
 }
