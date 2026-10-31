@@ -62,9 +62,13 @@ jobs:
             - name: 准备 Android 6 Flutter Engine
               run: bash tool/android6/prepare_engine.sh
 
-            - name: 验证弹幕字体与本地屏蔽
+            - name: 验证字体、播放选择与本地屏蔽
               run: >-
                   flutter test test/utils/danmaku_font_test.dart
+                  test/utils/font_archive_test.dart
+                  test/utils/video_quality_select_test.dart
+                  test/utils/audio_quality_select_test.dart
+                  test/utils/cdn_url_test.dart
                   test/widgets/danmaku_font_rendering_test.dart
                   test/widgets/report_local_block_test.dart
 

@@ -1,5 +1,6 @@
 import 'dart:ffi';
 import 'dart:io' show Directory, File;
+import 'dart:typed_data';
 import 'dart:ui' show loadFontFromList;
 
 import 'package:PiliPlus/plugin/pl_player/utils/danmaku_options.dart';
@@ -23,13 +24,45 @@ abstract final class FontUtils {
   static final _fonts = <String>{};
   static bool _initialized = false;
   static int _danmakuFontGeneration = 0;
+  static int _importFontGeneration = 0;
 
+  static const kFontName = 'customFont.otf';
   static const _kFontExts = ['ttf', 'ttc', 'otf'];
   static final _kFontDir = path.join(appSupportDirPath, 'font');
   // Keep danmaku fonts separate from both temporary files and global app fonts.
   static final _danmakuFontDir = path.join(appSupportDirPath, 'danmaku_fonts');
   static final _loadedFonts = <String>{};
   static final customFonts = Pref.customAppFont;
+
+  static void reloadCustomFonts() {
+    final fonts = Pref.customAppFont;
+    customFonts
+      ..clear()
+      ..addAll(fonts);
+    _loadedFonts.clear();
+  }
+
+  static Future<File> _writeImportedFont(String directory, Uint8List bytes) async {
+    await Directory(directory).create(recursive: true);
+    // Never use a family name or an archive path as a destination filename.
+    final id = '${DateTime.now().microsecondsSinceEpoch}_${++_importFontGeneration}';
+    return File(path.join(directory, '$id.otf')).writeAsBytes(bytes);
+  }
+
+  static Future<void> importAppFont(String family, Uint8List bytes) async {
+    await loadFontFromList(bytes, fontFamily: family);
+    final file = await _writeImportedFont(_kFontDir, bytes);
+    customFonts[family] = file.path;
+    _loadedFonts.add(family);
+    await GStorage.setting.put(SettingBoxKey.customAppFont, customFonts);
+  }
+
+  static Future<bool> importDanmakuFont(Uint8List bytes) async {
+    final file = await _writeImportedFont(_danmakuFontDir, bytes);
+    if (await loadNewFont(file.path)) return true;
+    await file.delete();
+    return false;
+  }
 
   static Future<void>? init() {
     final fontFamily = Pref.appFont;
