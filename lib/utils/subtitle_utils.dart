@@ -1,13 +1,18 @@
+import 'dart:convert' show jsonDecode, utf8;
+import 'dart:io' show File;
 import 'dart:typed_data' show Uint8List;
 
 import 'package:PiliPlus/common/constants.dart';
 import 'package:PiliPlus/http/init.dart';
 import 'package:PiliPlus/models/common/enum_with_label.dart';
+import 'package:PiliPlus/models_new/video/video_play_info/subtitle.dart';
 import 'package:PiliPlus/utils/accounts/account.dart';
+import 'package:PiliPlus/utils/extension/file_ext.dart';
 import 'package:PiliPlus/utils/extension/string_ext.dart';
 import 'package:PiliPlus/utils/path_utils.dart';
 import 'package:collection/collection.dart' show IterableExtension;
 import 'package:dio/dio.dart' show Options;
+import 'package:path/path.dart' as path;
 
 enum SubtitleFormat implements EnumWithLabel {
   json('JSON'),
@@ -22,12 +27,15 @@ enum SubtitleFormat implements EnumWithLabel {
 abstract final class SubtitleUtils {
   static const String _json = '.json';
   static const String _bcc = '.bcc';
-  static bool isJson(String fileName) =>
-      fileName.endsWith(_json) ||
-      fileName.endsWith(_bcc) ||
-      fileName.endsWith(PathUtils.subtitleExt);
+  static bool isJson(String fileName) {
+    final name = fileName.toLowerCase();
+    return name.endsWith(_json) ||
+        name.endsWith(_bcc) ||
+        name.endsWith(PathUtils.subtitleExt);
+  }
 
-  static const exts = [_json, 'vtt', 'srt', 'ass', _bcc, PathUtils.subtitleExt];
+  // FilePicker expects extension names without a leading dot.
+  static const exts = ['json', 'vtt', 'srt', 'ass', 'bcc', 'subtitle'];
 
   static String _vttTimecode(num seconds) {
     final h = (seconds ~/ 3600).toString().padLeft(2, '0');
@@ -85,5 +93,42 @@ abstract final class SubtitleUtils {
     return Uint8List.fromList(
       Request.responseBytesDecoder(res.data!, res.headers.map),
     );
+  }
+
+  static Future<List<LocalSubtitle>> cacheSubtitles(
+    String entryDirPath,
+    List<Subtitle> subtitles, {
+    Future<Uint8List?> Function(String) fetch = getSubtitle,
+  }) async {
+    final tracks = [for (final sub in subtitles) sub.toLocal(entryDirPath)];
+    if (tracks.isEmpty) return tracks;
+    if (tracks.map((track) => track.path).toSet().length != tracks.length) {
+      throw const FormatException('字幕文件 ID 重复');
+    }
+    final dir = await File(tracks.first.path).parent.create(recursive: true);
+    final staging = await dir.createTemp('.subtitles-');
+    try {
+      for (final (index, sub) in subtitles.indexed) {
+        final url = sub.subtitleUrl;
+        if (url == null || url.isEmpty) {
+          throw const FormatException('缺少字幕地址');
+        }
+        final bytes = await fetch(url);
+        if (bytes == null || bytes.isEmpty) throw const FormatException('字幕为空');
+        final document = jsonDecode(utf8.decode(bytes));
+        if (document is! Map || document['body'] is! List) {
+          throw const FormatException('离线字幕缺少正文');
+        }
+        final file = File(path.join(staging.path, '$index'));
+        await file.writeAsBytes(bytes, flush: true);
+      }
+      // Existing tracks stay readable throughout a refresh or a failed fetch.
+      for (final (index, track) in tracks.indexed) {
+        await File(path.join(staging.path, '$index')).rename(track.path);
+      }
+      return tracks;
+    } finally {
+      await staging.tryDel(recursive: true);
+    }
   }
 }

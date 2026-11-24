@@ -1,9 +1,45 @@
+import 'dart:async' show Completer, Timer;
 import 'dart:convert' show utf8, jsonEncode;
 
 import 'package:PiliPlus/models_new/live/live_trace/data.dart';
 import 'package:crypto/crypto.dart'
     show Hmac, md5, sha1, sha256, sha224, sha512, sha384, Hash;
 import 'package:flutter/foundation.dart' show kDebugMode;
+
+/// One viewing session. Only a completed heartbeat can schedule the next one.
+class LiveTraceSession {
+  bool _stopped = false;
+  Timer? _timer;
+  Completer<void>? _waiting;
+
+  void stop() {
+    _stopped = true;
+    _timer?.cancel();
+    final waiting = _waiting;
+    if (waiting != null && !waiting.isCompleted) waiting.complete();
+  }
+
+  Future<void> run({
+    required bool Function() canSend,
+    required Future<LiveTraceResp?> Function(LiveTraceResp?) send,
+  }) async {
+    LiveTraceResp? previous;
+    while (!_stopped && canSend()) {
+      previous = await send(previous);
+      if (_stopped || previous == null || !canSend()) return;
+
+      final interval = previous.interval > 0
+          ? previous.interval
+          : LiveTraceResp.kInterval;
+      final waiting = Completer<void>();
+      _waiting = waiting;
+      _timer = Timer(Duration(seconds: interval), () => waiting.complete());
+      await waiting.future;
+      _waiting = null;
+      _timer = null;
+    }
+  }
+}
 
 abstract final class LiveTraceUtils {
   static String? _hmacByRule(

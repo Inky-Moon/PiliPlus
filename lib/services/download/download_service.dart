@@ -16,7 +16,6 @@ import 'package:PiliPlus/models_new/pgc/pgc_info_model/result.dart';
 import 'package:PiliPlus/models_new/video/video_detail/data.dart';
 import 'package:PiliPlus/models_new/video/video_detail/episode.dart' as ugc;
 import 'package:PiliPlus/models_new/video/video_detail/page.dart';
-import 'package:PiliPlus/models_new/video/video_play_info/subtitle.dart';
 import 'package:PiliPlus/services/download/download_manager.dart';
 import 'package:PiliPlus/utils/accounts.dart';
 import 'package:PiliPlus/utils/cache_manager.dart';
@@ -44,6 +43,7 @@ class DownloadService extends GetxService {
   static const _maxDanmakuConcurrency = 4;
 
   final _downloadLock = Lock();
+  final _entryWriteLock = Lock();
 
   final flagNotifier = SetNotifier();
   final waitDownloadQueue = RxList<BiliDownloadEntryInfo>();
@@ -269,12 +269,11 @@ class DownloadService extends GetxService {
   Future<void> _createDownload(BiliDownloadEntryInfo entry) async {
     final entryDir = await _getDownloadEntryDir(entry);
     final entryDirPath = entryDir.path;
-    final entryJsonFile = File(path.join(entryDirPath, _entryFile));
-    await entryJsonFile.writeAsString(jsonEncode(entry.toJson()));
     entry
       ..pageDirPath = entryDir.parent.path
       ..entryDirPath = entryDirPath
       ..status = DownloadStatus.wait;
+    await _updateBiliDownloadEntryJson(entry);
     waitDownloadQueue.add(entry);
     if (curDownload.value?.status.isDownloading != true) {
       queueDownload(entry);
@@ -473,12 +472,6 @@ class DownloadService extends GetxService {
       if (res case Success(:final response)) {
         bool needsUpdate = false;
 
-        final viewPoints = response.viewPoints;
-        if (viewPoints != null && viewPoints.isNotEmpty) {
-          entry.viewPoints = viewPoints;
-          needsUpdate = true;
-        }
-
         final subtitles =
             response.subtitle?.subtitles ??
             (!Accounts.main.isLogin
@@ -491,11 +484,16 @@ class DownloadService extends GetxService {
                 : null);
 
         if (subtitles != null && subtitles.isNotEmpty) {
-          entry.subtitles = subtitles
-              .map((e) => e.toLocal(entry.entryDirPath))
-              .toList();
+          entry.subtitles = await SubtitleUtils.cacheSubtitles(
+            entry.entryDirPath,
+            subtitles,
+          );
           needsUpdate = true;
-          Future.wait(subtitles.map((sub) => _downloadSubtitle(entry, sub)));
+        }
+        final viewPoints = response.viewPoints;
+        if (viewPoints != null && viewPoints.isNotEmpty) {
+          entry.viewPoints = viewPoints;
+          needsUpdate = true;
         }
 
         if (needsUpdate) {
@@ -508,21 +506,6 @@ class DownloadService extends GetxService {
     } catch (e, s) {
       if (kDebugMode) debugPrint('$e\n\n$s');
       return false;
-    }
-  }
-
-  Future<void> _downloadSubtitle(
-    BiliDownloadEntryInfo entry,
-    Subtitle sub,
-  ) async {
-    try {
-      final bytes = await SubtitleUtils.getSubtitle(sub.subtitleUrl!);
-      if (bytes == null) return;
-      final file = File(sub.toPath(entry.entryDirPath));
-      if (!file.existsSync()) await file.create(recursive: true);
-      file.writeAsBytes(bytes);
-    } catch (e, s) {
-      if (kDebugMode) debugPrint('$e\n\n$s');
     }
   }
 
@@ -610,7 +593,7 @@ class DownloadService extends GetxService {
 
       // ugc segments
       if (entry.pageData != null && Pref.enableSponsorBlock) {
-        updateUgcSegments(entry);
+        await updateUgcSegments(entry);
       }
 
       _updateCurStatus(DownloadStatus.getPlayUrl);
@@ -696,8 +679,17 @@ class DownloadService extends GetxService {
   }
 
   Future<void> _updateBiliDownloadEntryJson(BiliDownloadEntryInfo entry) {
-    final entryJsonFile = File(path.join(entry.entryDirPath, _entryFile));
-    return entryJsonFile.writeAsString(jsonEncode(entry.toJson()));
+    return _entryWriteLock.synchronized(() async {
+      final target = path.join(entry.entryDirPath, _entryFile);
+      final pending = File('$target.tmp');
+      try {
+        await pending.writeAsString(jsonEncode(entry.toJson()), flush: true);
+        await pending.rename(target);
+      } catch (_) {
+        await pending.tryDel();
+        rethrow;
+      }
+    });
   }
 
   void _onReceive(int progress, int total) {

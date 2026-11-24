@@ -707,6 +707,7 @@ class HeaderControlState extends State<HeaderControl>
                   onTap: () async {
                     Get.back();
                     try {
+                      final cid = videoDetailCtr.cid.value;
                       final result = await FilePicker.pickFile(
                         type: .custom,
                         allowedExtensions: SubtitleUtils.exts,
@@ -715,11 +716,17 @@ class HeaderControlState extends State<HeaderControl>
                         final file = result.xFile;
                         final path = file.path;
                         final name = file.name;
-                        final length = videoDetailCtr.subtitles.length;
-                        await videoDetailCtr.loadFileSubtitle(
+                        final data = await videoDetailCtr.loadFileSubtitle(
                           path: path,
                           fileName: name,
                         );
+                        if (data == null ||
+                            videoDetailCtr.isClosed ||
+                            videoDetailCtr.cid.value != cid) {
+                          return;
+                        }
+                        final length = videoDetailCtr.subtitles.length;
+                        videoDetailCtr.vttSubtitles[length] = data;
                         videoDetailCtr.subtitles.add(
                           Subtitle(
                             id: null,

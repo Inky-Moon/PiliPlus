@@ -57,7 +57,6 @@ import 'package:PiliPlus/utils/connectivity_utils.dart';
 import 'package:PiliPlus/utils/extension/nested_scroll_ext.dart';
 import 'package:PiliPlus/utils/extension/num_ext.dart';
 import 'package:PiliPlus/utils/page_utils.dart';
-import 'package:PiliPlus/utils/path_utils.dart';
 import 'package:PiliPlus/utils/platform_utils.dart';
 import 'package:PiliPlus/utils/reply_scheme_helper.dart';
 import 'package:PiliPlus/utils/storage.dart';
@@ -1066,12 +1065,12 @@ class VideoDetailController extends GetxController
   final RxList<Subtitle> subtitles = RxList<Subtitle>();
   final Map<int, SubtitleData> vttSubtitles = {};
   late final vttSubtitlesIndex = (-1).obs;
+  int _subtitleRequest = 0;
+
   Future<SubtitleData?> loadFileSubtitle({
     required String path,
     required String fileName,
   }) async {
-    SubtitleData? data;
-    final length = subtitles.length;
     if (SubtitleUtils.isJson(fileName)) {
       final file = File(path);
       final stream = file.openRead().transform(utf8.decoder);
@@ -1087,58 +1086,61 @@ class VideoDetailController extends GetxController
         jsonDecode(sub)['body'],
       );
       if (isClosed) return null;
-      data = (isData: true, id: sub);
-      vttSubtitles[length] = data;
-    } else {
-      data = (isData: false, id: path);
-      vttSubtitles[length] = data;
+      return (isData: true, id: sub);
     }
-    return data;
+    return (isData: false, id: path);
   }
 
   // 设定字幕轨道
   Future<void> setSubtitle(int index) async {
+    final request = ++_subtitleRequest;
     if (index <= 0) {
       await plPlayerController.videoPlayerController?.setSubtitleTrack(.no());
-      vttSubtitlesIndex.value = index;
+      if (!isClosed && request == _subtitleRequest) {
+        vttSubtitlesIndex.value = index;
+      }
       return;
     }
 
+    if (index > subtitles.length) return;
+    final track = subtitles[index - 1];
     var subtitle = vttSubtitles[index - 1];
     if (subtitle == null) {
-      final rawSub = subtitles[index - 1];
-      if (rawSub is LocalSubtitle) {
-        subtitle = await loadFileSubtitle(
-          path: rawSub.path,
-          fileName: PathUtils.subtitleExt,
-        );
-      } else {
-        final result = await VideoHttp.getSubtitles(
-          subtitles[index - 1].subtitleUrl!,
-        );
-        if (!isClosed && result != null) {
-          subtitle = (isData: true, id: result);
-          vttSubtitles[index - 1] = subtitle;
-        } else {
+      if (track is LocalSubtitle) {
+        try {
+          subtitle = await loadFileSubtitle(
+            path: track.path,
+            fileName: track.path,
+          );
+        } catch (e) {
+          if (!isClosed && request == _subtitleRequest) {
+            SmartDialog.showToast('读取离线字幕失败：$e');
+          }
           return;
         }
+      } else {
+        final url = track.subtitleUrl;
+        if (url == null || url.isEmpty) return;
+        final result = await VideoHttp.getSubtitles(url);
+        if (result != null) subtitle = (isData: true, id: result);
       }
+      if (subtitle == null ||
+          isClosed ||
+          request != _subtitleRequest ||
+          index > subtitles.length ||
+          !identical(track, subtitles[index - 1])) {
+        return;
+      }
+      vttSubtitles[index - 1] = subtitle;
     }
-    if (subtitle == null) return;
-    await _setSub(index, subtitle);
-  }
 
-  Future<void> _setSub(int index, SubtitleData subtitle) async {
-    final sub = subtitles[index - 1];
-
-    String subUri = subtitle.id;
-    if (subtitle.isData) {
-      subUri = 'memory://$subUri';
-    }
+    final subUri = subtitle.isData ? 'memory://${subtitle.id}' : subtitle.id;
     await plPlayerController.videoPlayerController?.setSubtitleTrack(
-      SubtitleTrack(subUri, sub.lanDoc, sub.lan, uri: true),
+      SubtitleTrack(subUri, track.lanDoc, track.lan, uri: true),
     );
-    vttSubtitlesIndex.value = index;
+    if (!isClosed && request == _subtitleRequest) {
+      vttSubtitlesIndex.value = index;
+    }
   }
 
   // interactive video
@@ -1321,6 +1323,7 @@ class VideoDetailController extends GetxController
     savedDanmaku = null;
 
     // subtitle
+    _subtitleRequest++;
     subtitles.clear();
     vttSubtitlesIndex.value = -1;
     vttSubtitles.clear();

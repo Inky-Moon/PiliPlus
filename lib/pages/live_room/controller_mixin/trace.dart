@@ -1,97 +1,75 @@
 part of 'package:PiliPlus/pages/live_room/controller.dart';
 
 mixin _LiveTraceMixin on GetxController, _LiveDataMixin {
-  Timer? _liveTraceTimer;
-  LiveTraceReq? _liveTraceReq;
-  LiveTraceResp? _liveTraceResp;
-  int get _liveTraceInterval =>
-      _liveTraceResp?.interval ?? LiveTraceResp.kInterval;
+  LiveTraceSession? _liveTraceSession;
+  bool _liveTraceRequested = true;
+
+  bool get _canTrace =>
+      _liveTraceRequested &&
+      !isClosed &&
+      plPlayerController.visible &&
+      plPlayerController.playerStatus.isPlaying &&
+      heartbeat.isLogin &&
+      !Pref.historyPause;
+
+  void _startLiveTraceTimer() {
+    _liveTraceRequested = true;
+    _initLiveTraceIfNeeded();
+  }
+
+  void _stopLiveTraceTimer() {
+    _liveTraceRequested = false;
+    _liveTraceSession?.stop();
+    _liveTraceSession = null;
+  }
 
   Future<void> _initLiveTraceIfNeeded() async {
-    if (isClosed || !isLoaded.value || !heartbeat.isLogin) return;
-    try {
-      // id
-      final ruid = this.ruid!;
-      final roomInfo = roomInfoH5.rawValue?.roomInfo;
-      if (roomInfo == null) {
-        Utils.reportError('liveTrace: null roomInfo');
-        return;
-      }
-      final parentAreaId = roomInfo.parentAreaId!;
-      final areaId = roomInfo.areaId!;
+    if (_liveTraceSession != null || !_canTrace || !isLoaded.value) return;
+    final roomInfo = roomInfoH5.rawValue?.roomInfo;
+    final ruid = this.ruid;
+    final parentAreaId = roomInfo?.parentAreaId;
+    final areaId = roomInfo?.areaId;
+    if (ruid == null || parentAreaId == null || areaId == null) return;
 
-      // liveBuvid
+    final session = LiveTraceSession();
+    _liveTraceSession = session;
+    try {
       final cookies = await heartbeat.cookieJar.loadForRequest(
         Uri.parse(HttpString.baseUrl),
       );
+      if (_liveTraceSession != session) return;
       final liveBuvid = cookies
           .firstWhereOrNull((cookie) => cookie.name == 'LIVE_BUVID')
           ?.value;
-      if (isClosed) return;
-      if (liveBuvid == null) {
-        Utils.reportError('liveTrace: null liveBuvid');
-        return;
-      }
+      if (liveBuvid == null) throw StateError('liveTrace: missing LIVE_BUVID');
 
-      _liveTraceReq = LiveTraceReq(
+      final request = LiveTraceReq(
         parentAreaId: parentAreaId,
         areaId: areaId,
         roomId: roomId,
         liveBuvid: liveBuvid,
         ruid: ruid,
       );
-      _startLiveTraceTimer();
-    } catch (_) {
-      if (kDebugMode) rethrow;
-    }
-  }
-
-  void _startLiveTraceTimer() {
-    if (_liveTraceReq == null || isClosed || _liveTraceTimer != null) {
-      return;
-    }
-    _liveTraceReq!.seqId = 0; // reset
-    _onLiveTrace();
-    _liveTraceTimer = Timer.periodic(
-      Duration(seconds: _liveTraceInterval),
-      _onLiveTrace,
-    );
-  }
-
-  void _stopLiveTraceTimer() {
-    _liveTraceTimer?.cancel();
-    _liveTraceTimer = null;
-  }
-
-  Future<void> _onLiveTrace([_]) async {
-    if (kDebugMode) logger.i('liveTraceReq: $_liveTraceReq');
-    final res = _liveTraceReq!.seqId == 0
-        ? await LiveHttp.liveTraceE(
-            traceReq: _liveTraceReq!,
-            heartbeat: heartbeat,
-          )
-        : await LiveHttp.liveTraceX(
-            traceReq: _liveTraceReq!,
-            traceResp: _liveTraceResp!,
-            heartbeat: heartbeat,
-          );
-    if (isClosed) return;
-    if (res case Success(:final response)) {
-      if (kDebugMode) logger.i('liveTraceResp: $response');
-      // update interval
-      final newInterval = response.interval;
-      if (_liveTraceInterval != newInterval) {
-        _liveTraceTimer?.cancel();
-        _liveTraceTimer = Timer.periodic(
-          Duration(seconds: newInterval),
-          _onLiveTrace,
-        );
-      }
-
-      _liveTraceResp = response;
-    } else {
-      Utils.reportError('live trace error: $res');
-      _stopLiveTraceTimer();
+      await session.run(
+        canSend: () => _canTrace,
+        send: (previous) async {
+          final res = previous == null
+              ? await LiveHttp.liveTraceE(traceReq: request, heartbeat: heartbeat)
+              : await LiveHttp.liveTraceX(
+                  traceReq: request,
+                  traceResp: previous,
+                  heartbeat: heartbeat,
+                );
+          if (!res.isSuccess && _liveTraceSession == session) {
+            Utils.reportError('live trace error: $res');
+          }
+          return res.dataOrNull;
+        },
+      );
+    } catch (e, s) {
+      if (_liveTraceSession == session) Utils.reportError(e, s);
+    } finally {
+      if (_liveTraceSession == session) _liveTraceSession = null;
     }
   }
 }

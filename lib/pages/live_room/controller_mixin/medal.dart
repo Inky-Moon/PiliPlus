@@ -3,7 +3,7 @@ part of 'package:PiliPlus/pages/live_room/controller.dart';
 mixin _LiveMedalMixin on GetxController, _LiveDataMixin {
   late bool hasMedal = false;
   late final medal = Rxn<UinfoMedal>();
-  late final FansMedalController medalController;
+  late final medalController = Get.putOrFind(FansMedalController.new);
 
   late final String fansPanelUrl =
       'https://live.bilibili.com/p/html/live-app-fanspanel/index.html?roomId=$roomId&anchorId=$ruid&room_id=$roomId&anchor_id=$ruid';

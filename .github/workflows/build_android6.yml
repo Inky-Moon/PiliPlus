@@ -62,13 +62,17 @@ jobs:
             - name: 准备 Android 6 Flutter Engine
               run: bash tool/android6/prepare_engine.sh
 
-            - name: 验证字体、播放选择与本地屏蔽
+            - name: 运行 Android 6 回归测试
               run: >-
                   flutter test test/utils/danmaku_font_test.dart
                   test/utils/font_archive_test.dart
                   test/utils/video_quality_select_test.dart
                   test/utils/audio_quality_select_test.dart
                   test/utils/cdn_url_test.dart
+                  test/utils/offline_subtitles_test.dart
+                  test/utils/live_trace_session_test.dart
+                  test/utils/dlna_utils_test.dart
+                  test/pages/login/geetest/captcha_config_test.dart
                   test/widgets/danmaku_font_rendering_test.dart
                   test/widgets/report_local_block_test.dart
 
@@ -85,8 +89,11 @@ jobs:
                     --android-project-arg android6Compatibility=1 \
                     --no-pub
 
-            - name: 验证最终 APK 字节码
-              run: bash tool/android6/verify_apk.sh build/app/outputs/flutter-apk/app-*-release.apk
+            - name: 验证 32 位 ARM 产物和最终 APK 字节码
+              run: |
+                  unzip -tq build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk \
+                    lib/armeabi-v7a/libflutter.so lib/armeabi-v7a/libapp.so
+                  bash tool/android6/verify_apk.sh build/app/outputs/flutter-apk/app-*-release.apk
 
             - name: 验证 Flutter Engine 依赖
               working-directory: android

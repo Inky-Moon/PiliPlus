@@ -5,8 +5,6 @@ mixin _LiveBlockMixin on _LiveMedalMixin {
   late final Set<int> _shieldUids = {};
 
   Future<void> _fetchBlockRules() async {
-    medalController = Get.putOrFind(FansMedalController.new);
-
     final res = await LiveHttp.getLiveInfoByUser(roomId);
     if (res case Success(:final response)) {
       final medal = response.medal;
