@@ -36,15 +36,16 @@ abstract final class DownloadHttp {
         != null when isLogin => VideoType.pgc,
         _ => VideoType.ugc,
       },
+      voiceBalance: true,
     );
     if (res case Success(:final response)) {
       final dash = response.dash;
 
-      // UGC segments were fetched from SponsorBlock before resolving the URL.
-      // Only PGC/PUGV use the playback API's clip_info_list.
+      // UGC segments come from SponsorBlock. PGC/PUGV use clip_info_list.
       if (entry.pageData == null) {
         entry.segments = response.clipInfoList;
       }
+      entry.volume = response.volume ?? entry.volume;
 
       if (dash != null) {
         final (
@@ -72,14 +73,14 @@ abstract final class DownloadHttp {
         final Type2File videoFile = Type2File(
           id: videoDash.id,
           baseUrl: videoUrl,
-          bandwidth: videoDash.bandWidth!,
-          codecid: videoDash.codecid!,
+          bandwidth: videoDash.bandWidth ?? 0,
+          codecid: videoDash.codecid ?? 0,
           size: 0,
           md5: '',
           noRexcode: false,
           frameRate: videoDash.frameRate ?? '',
-          width: videoDash.width!,
-          height: videoDash.height!,
+          width: videoDash.width ?? 1,
+          height: videoDash.height ?? 1,
           dashDrmType: 0,
         );
         List<Type2File>? audioFileList;
@@ -99,14 +100,14 @@ abstract final class DownloadHttp {
             Type2File(
               id: audioDash.id,
               baseUrl: audioUrl,
-              bandwidth: audioDash.bandWidth!,
-              codecid: audioDash.codecid!,
+              bandwidth: audioDash.bandWidth ?? 0,
+              codecid: audioDash.codecid ?? 0,
               size: 0,
               md5: '',
               noRexcode: false,
-              frameRate: audioDash.frameRate!,
-              width: audioDash.width!,
-              height: audioDash.height!,
+              frameRate: audioDash.frameRate ?? '',
+              width: audioDash.width ?? 1,
+              height: audioDash.height ?? 1,
               dashDrmType: 0,
             ),
           ];
@@ -124,11 +125,11 @@ abstract final class DownloadHttp {
         final List<Type1Segment> segmentList = [
           Type1Segment(
             backupUrls: [],
-            bytes: first.size!,
-            duration: first.length!,
+            bytes: first.size ?? 0,
+            duration: first.length ?? 0,
             md5: '',
             metaUrl: '',
-            order: first.order!,
+            order: first.order ?? 0,
             url: VideoUtils.getCdnUrl(first.playUrls),
           ),
         ];
