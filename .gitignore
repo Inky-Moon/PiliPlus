@@ -147,6 +147,7 @@ devtools_options.yaml
 
 pili_release.json
 /android/android6-engine-repo/
+/tool/android6/.cache/
 /_user_files/
 
 dist
